@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { isQuizShortcutRecording, resolveQuizShortcutAction } from '@/modules/quiz/domain/quiz-entity/model/quizShortcuts'
+import { isQuizShortcutRecording, isQuizSpaceKey, resolveQuizShortcutAction } from '@/modules/quiz/domain/quiz-entity/model/quizShortcuts'
 import {
   QUIZ_SHORTCUTS_UPDATED_EVENT,
   readQuizShortcuts,
@@ -34,6 +34,20 @@ function enterOnUnrelatedControl(event: KeyboardEvent) {
   if (!(target instanceof HTMLElement)) return false
   if (focusedOptionIndex(target) != null) return false
   return Boolean(target.closest('button, [role="button"], a'))
+}
+
+/**
+ * Space on a focused control belongs to that control: it activates buttons,
+ * links and menu items. Option buttons are reported separately because after
+ * the answer is revealed Space pages on from a focused option.
+ */
+function spaceOnControl(event: KeyboardEvent) {
+  if (!isQuizSpaceKey(event)) return { option: false, unrelated: false }
+  const target = event.target
+  if (!(target instanceof HTMLElement)) return { option: false, unrelated: false }
+  const option = focusedOptionIndex(target) != null
+  const control = Boolean(target.closest('button, [role="button"], a'))
+  return { option, unrelated: control && !option }
 }
 
 export function useQuizAnsweringShortcuts({
@@ -129,6 +143,7 @@ export function useQuizAnsweringShortcuts({
       const current = latestRef.current
       const editable = isEditableTarget(target)
       const recording = isQuizShortcutRecording()
+      const spaceTarget = spaceOnControl(event)
       const match = resolveQuizShortcutAction(event, shortcutsRef.current, {
         questionCount: current.questionCount,
         optionCount: current.optionCount,
@@ -140,6 +155,8 @@ export function useQuizAnsweringShortcuts({
         editable,
         recording,
         enterOnUnrelatedControl: enterOnUnrelatedControl(event),
+        spaceOnUnrelatedControl: spaceTarget.unrelated,
+        spaceOnOption: spaceTarget.option,
       })
       // ↑/↓ also snap the freestyle feed behind this dialog.
       const verticalFeedKey = event.key === 'ArrowUp' || event.key === 'ArrowDown'

@@ -153,6 +153,15 @@ describe('FreestyleScopeQuizDialog inline question edit', () => {
     expect(screen.queryByTestId('quiz-question-edit-form')).toBeNull()
   })
 
+  it('pages to the next question on Space', async () => {
+    renderScopeQuizDialog()
+
+    expect(await screen.findByText('第 41 题干')).toBeTruthy()
+    fireEvent.keyDown(window, { key: ' ', code: 'Space' })
+
+    expect(await screen.findByText('第 42 题干')).toBeTruthy()
+  })
+
   it('cancels without saving and unlocks paging', async () => {
     renderScopeQuizDialog()
 

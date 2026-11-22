@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>果冻质感思维导图 · 翻卡收卡</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #f5f7fb 0%, #d1dce6 50%, #c3cfe2 100%);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .title {
+            font-size: 26px;
+            font-weight: 700;
+            color: #5a67d8;
+            letter-spacing: -0.5px;
+        }
+
+        .subtitle {
+            font-size: 12px;
+            color: rgba(0, 0, 0, 0.65);
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 10px 22px;
+            border: none;
+            border-radius: 24px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+            background: linear-gradient(135deg, #3d5a9e 0%, #4a3f6b 100%);
+            color: #ffffff;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+        }
+
+        .btn:active {
+            transform: translateY(-1px);
+        }
+
+        .btn:active::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            overflow: auto;
+            background: radial-gradient(circle at 15% 45%, rgba(102, 126, 234, 0.08) 0%, transparent 60%),
+                        radial-gradient(circle at 85% 85%, rgba(118, 75, 162, 0.08) 0%, transparent 60%);
+        }
+
+        .canvas-container::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .canvas-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .canvas-container::-webkit-scrollbar-thumb {
+            background: rgba(102, 126, 234, 0.3);
+            border-radius: 4px;
+            transition: background 0.3s;
+        }
+
+        .canvas-container::-webkit-scrollbar-thumb:hover {
+            background: rgba(102, 126, 234, 0.5);
+        }
+
+        svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+
+        .mindmap {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        .nodes-container {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        .node {
+            position: absolute;
+            perspective: 1200px;
+            touch-action: none;
+        }
+
+        .node.root .card {
+            width: 180px;
+            height: 110px;
+        }
+
+        .node.root .card-face {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .node.level-1 .card {
+            width: 160px;
+            height: 100px;
+        }
+
+        .node.level-2 .card {
+            width: 150px;
+            height: 95px;
+        }
+
+        .card {
+            width: 160px;
+            height: 100px;
+            position: relative;
+            cursor: grab;
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transform-style: preserve-3d;
+            will-change: transform;
+        }
+
+        .node:active .card {
+            cursor: grabbing;
+        }
+
+        .card.flipping {
+            animation: flipCard 0.7s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+
+        @keyframes flipCard {
+            0% {
+                transform: rotateY(0deg) rotateX(0deg);
+            }
+            50% {
+                transform: rotateY(95deg) rotateX(5deg);
+            }
+            100% {
+                transform: rotateY(180deg) rotateX(0deg);
+            }
+        }
+
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            border-radius: 24px;
+            font-size: 13px;
+            font-weight: 600;
+            text-align: center;
+            line-height: 1.5;
+            box-shadow: 0 10px 32px rgba(0, 0, 0, 0.1),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            backdrop-filter: blur(12px);
+            color: #2c3e50;
+        }
+
+        .card-front {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 255, 0.95) 100%);
+            transform: rotateY(0deg) rotateZ(0deg);
+            position: relative;
+        }
+
+        .card-front::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 24px;
+            background: radial-gradient(circle at 20% 30%, rgba(102, 126, 234, 0.08) 0%, transparent 60%);
+            pointer-events: none;
+        }
+
+        .card-back {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.96) 0%, rgba(118, 75, 162, 0.96) 100%);
+            color: white;
+            transform: rotateY(180deg);
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .card.flipped .card-front {
+            transform: rotateY(180deg);
+        }
+
+        .card.flipped .card-back {
+            transform: rotateY(0deg);
+        }
+
+        .node:hover:not(.dragging) .card {
+            transform: scale(1.08) translateZ(10px);
+            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.14),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        }
+
+        .node.dragging .card {
+            transform: scale(1.12) translateZ(20px);
+            box-shadow: 0 20px 50px rgba(102, 126, 234, 0.3),
+                        0 0 60px rgba(102, 126, 234, 0.2);
+            filter: brightness(1.05);
+        }
+
+        .collapse-btn {
+            position: absolute;
+            bottom: -32px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #3d5a9e 0%, #4a3f6b 100%);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+            transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+            opacity: 0;
+            pointer-events: none;
+            line-height: 1;
+        }
+
+        .node.has-children:hover .collapse-btn {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .collapse-btn:hover {
+            transform: translateX(-50%) scale(1.2) rotateZ(15deg);
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+            box-shadow: 0 6px 24px rgba(102, 126, 234, 0.4);
+        }
+
+        .collapse-btn:active {
+            transform: translateX(-50%) scale(0.95);
+        }
+
+        .guide {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: rgba(0, 0, 0, 0.25);
+            pointer-events: none;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .guide h2 {
+            font-size: 32px;
+            margin-bottom: 12px;
+            font-weight: 700;
+        }
+
+        .guide p {
+            font-size: 14px;
+            line-height: 1.8;
+            font-weight: 500;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(-50%, -50%) translateY(0px); }
+            50% { transform: translate(-50%, -50%) translateY(-8px); }
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 15px;
+                padding: 15px 20px;
+            }
+
+            .header-left {
+                width: 100%;
+            }
+
+            .controls {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .btn {
+                flex: 1;
+                font-size: 13px;
+                padding: 9px 18px;
+            }
+
+            .title {
+                font-size: 22px;
+            }
+
+            .node.root .card {
+                width: 140px;
+                height: 90px;
+            }
+
+            .node.level-1 .card {
+                width: 130px;
+                height: 85px;
+            }
+
+            .node.level-2 .card {
+                width: 120px;
+                height: 80px;
+            }
+
+            .card-face {
+                font-size: 12px;
+                padding: 12px;
+            }
+
+            .card.flipped .card-back {
+                font-size: 10px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            <div class="title">🧩 思维导图</div>
+            <div class="subtitle">点击卡片翻面 · 拖动移动位置 · 点击 − 收起分支</div>
+        </div>
+        <div class="controls">
+            <button class="btn" id="expandAllBtn">📖 展开全部</button>
+            <button class="btn" id="collapseAllBtn">📦 收起全部</button>
+        </div>
+    </div>
+
+    <div class="canvas-container" id="canvasContainer">
+        <svg id="linesSvg"></svg>
+        <div class="mindmap">
+            <div class="nodes-container" id="nodesContainer"></div>
+            <div class="guide" id="guide">
+                <h2>✨</h2>
+                <p>从中心出发<br>探索知识树</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 数据结构
+        const mindmapData = {
+            id: 'root',
+            title: '2027考研冲刺',
+            content: '政治 · 英语 · 数学 · 专业课',
+            children: [
+                {
+                    id: 'politics',
+                    title: '🏛️ 政治',
+                    content: '马原 · 毛特 · 史纲 · 思修',
+                    children: [
+                        { id: 'pol-1', title: '马克思主义原理', content: '唯物史观 · 政治经济学 · 科学社会主义' },
+                        { id: 'pol-2', title: '毛特中特', content: '中国特色社会主义理论与实践' },
+                        { id: 'pol-3', title: '史纲', content: '中国近代史 · 社会主义建设 · 改革开放' },
+                        { id: 'pol-4', title: '思修', content: '人生价值观 · 法律基础 · 道德修养' }
+                    ]
+                },
+                {
+                    id: 'english',
+                    title: '🌍 英语',
+                    content: '词汇 · 语法 · 阅读 · 写作',
+                    children: [
+                        { id: 'eng-1', title: '词汇精进', content: '核心词汇5500+ · 熟词偶义' },
+                        { id: 'eng-2', title: '语法体系', content: '从句结构 · 时态搭配 · 特殊用法' },
+                        { id: 'eng-3', title: '阅读理解', content: '篇章逻辑 · 长难句分析 · 题型策略' }
+                    ]
+                },
+                {
+                    id: 'math',
+                    title: '📐 数学',
+                    content: '高数 · 线代 · 概率',
+                    children: [
+                        { id: 'math-1', title: '高等数学', content: '微积分 · 极限 · 多元函数 · 微分方程' },
+                        { id: 'math-2', title: '线性代数', content: '矩阵运算 · 特征值 · 二次型' },
+                        { id: 'math-3', title: '概率论', content: '概率基础 · 随机变量 · 大数定律' }
+                    ]
+                },
+                {
+                    id: 'specialty',
+                    title: '👨‍🎓 专业课',
+                    content: '教育学 · 心理学',
+                    children: [
+                        { id: 'spec-1', title: '教育学基础', content: '教育的本质与功能 · 教育观念演变' },
+                        { id: 'spec-2', title: '心理学', content: '学习理论 · 动机激励 · 个体差异' },
+                        { id: 'spec-3', title: '实践策略', content: '教学设计 · 学生管理 · 改革创新' }
+                    ]
+                }
+            ]
+        };
+
+        // 状态管理
+        const state = {
+            nodes: new Map(),
+            collapsedNodes: new Set(),
+            draggedNode: null,
+            dragStart: { x: 0, y: 0 },
+            dragOffset: { x: 0, y: 0 },
+            velocity: { x: 0, y: 0 },
+            animationId: null
+        };
+
+        // 初始化节点位置（极坐标布局）
+        function initializePositions(node, centerX, centerY, level = 0, index = 0, siblingCount = 1) {
+            const nodeData = {
+                id: node.id,
+                title: node.title,
+                content: node.content,
+                x: centerX,
+                y: centerY,
+                level: level,
+                children: node.children ? node.children.map((_, i) => i) : [],
+                parent: null,
+                flipped: false,
+                collapsed: false,
+                originalX: centerX,
+                originalY: centerY,
+                isDragging: false
+            };
+
+            state.nodes.set(node.id, nodeData);
+
+            if (node.children && node.children.length > 0) {
+                const childCount = node.children.length;
+                // 根据级别调整半径
+                const baseRadius = 320 + level * 140;
+
+                // 安排在圆周上
+                node.children.forEach((child, i) => {
+                    const angle = (i / childCount) * Math.PI * 2 - Math.PI / 2;
+                    const childX = centerX + Math.cos(angle) * baseRadius;
+                    const childY = centerY + Math.sin(angle) * baseRadius;
+
+                    initializePositions(child, childX, childY, level + 1, i, childCount);
+                    state.nodes.get(child.id).parent = node.id;
+                });
+            }
+        }
+
+        // 绘制连线（使用贝塞尔曲线）
+        function drawLines() {
+            const svg = document.getElementById('linesSvg');
+            const container = document.getElementById('canvasContainer');
+            svg.setAttribute('width', container.scrollWidth);
+            svg.setAttribute('height', container.scrollHeight);
+            svg.innerHTML = '';
+
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+            gradient.setAttribute('id', 'lineGradient');
+            gradient.setAttribute('x1', '0%');
+            gradient.setAttribute('y1', '0%');
+            gradient.setAttribute('x2', '100%');
+            gradient.setAttribute('y2', '100%');
+
+            const stop1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+            stop1.setAttribute('offset', '0%');
+            stop1.setAttribute('stop-color', 'rgba(102, 126, 234, 0.25)');
+
+            const stop2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+            stop2.setAttribute('offset', '100%');
+            stop2.setAttribute('stop-color', 'rgba(118, 75, 162, 0.15)');
+
+            gradient.appendChild(stop1);
+            gradient.appendChild(stop2);
+            defs.appendChild(gradient);
+            svg.appendChild(defs);
+
+            state.nodes.forEach((nodeData, nodeId) => {
+                if (nodeData.parent) {
+                    const parentData = state.nodes.get(nodeData.parent);
+                    if (parentData && !state.collapsedNodes.has(nodeData.parent)) {
+                        const x1 = parentData.x + 90;
+                        const y1 = parentData.y + 55;
+                        const x2 = nodeData.x + 80;
+                        const y2 = nodeData.y + 50;
+
+                        const ctrlX = (x1 + x2) / 2;
+                        const ctrlY = (y1 + y2) / 2 + 30;
+
+                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        path.setAttribute('d', `M ${x1} ${y1} Q ${ctrlX} ${ctrlY} ${x2} ${y2}`);
+                        path.setAttribute('fill', 'none');
+                        path.setAttribute('stroke', 'url(#lineGradient)');
+                        path.setAttribute('stroke-width', '2');
+                        path.setAttribute('stroke-linecap', 'round');
+                        svg.appendChild(path);
+                    }
+                }
+            });
+        }
+
+        // 渲染节点
+        function renderNodes() {
+            const container = document.getElementById('nodesContainer');
+            const guide = document.getElementById('guide');
+            container.innerHTML = '';
+
+            let hasVisibleNode = false;
+
+            state.nodes.forEach((nodeData, nodeId) => {
+                // 检查是否被隐藏（父节点收起）
+                let visible = true;
+                let currentParent = nodeData.parent;
+                while (currentParent) {
+                    if (state.collapsedNodes.has(currentParent)) {
+                        visible = false;
+                        break;
+                    }
+                    currentParent = state.nodes.get(currentParent).parent;
+                }
+
+                if (!visible) return;
+                hasVisibleNode = true;
+
+                const nodeEl = document.createElement('div');
+                nodeEl.className = `node level-${nodeData.level}`;
+                if (nodeId === 'root') nodeEl.classList.add('root');
+                if (nodeData.children.length > 0) nodeEl.classList.add('has-children');
+                if (nodeData.isDragging) nodeEl.classList.add('dragging');
+
+                nodeEl.id = nodeId;
+                nodeEl.style.left = Math.round(nodeData.x) + 'px';
+                nodeEl.style.top = Math.round(nodeData.y) + 'px';
+
+                const cardEl = document.createElement('div');
+                cardEl.className = 'card';
+                if (nodeData.flipped) cardEl.classList.add('flipped');
+
+                const frontFace = document.createElement('div');
+                frontFace.className = 'card-face card-front';
+                frontFace.textContent = nodeData.title;
+
+                const backFace = document.createElement('div');
+                backFace.className = 'card-face card-back';
+                backFace.textContent = nodeData.content;
+
+                cardEl.appendChild(frontFace);
+                cardEl.appendChild(backFace);
+                nodeEl.appendChild(cardEl);
+
+                // 翻卡交互
+                cardEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (!state.draggedNode) {
+                        nodeData.flipped = !nodeData.flipped;
+                        cardEl.classList.add('flipping');
+                        setTimeout(() => {
+                            cardEl.classList.remove('flipping');
+                            if (nodeData.flipped) {
+                                cardEl.classList.add('flipped');
+                            } else {
+                                cardEl.classList.remove('flipped');
+                            }
+                        }, 350);
+                    }
+                });
+
+                // 收展按钮
+                if (nodeData.children.length > 0) {
+                    const collapseBtn = document.createElement('button');
+                    collapseBtn.className = 'collapse-btn';
+                    collapseBtn.textContent = state.collapsedNodes.has(nodeId) ? '+' : '−';
+                    collapseBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        toggleCollapse(nodeId);
+                    });
+                    nodeEl.appendChild(collapseBtn);
+                }
+
+                // 拖动逻辑
+                nodeEl.addEventListener('mousedown', (e) => {
+                    if (e.button !== 0) return; // 仅左键
+
+                    state.draggedNode = nodeId;
+                    nodeData.isDragging = true;
+                    state.dragStart.x = e.clientX;
+                    state.dragStart.y = e.clientY;
+                    state.dragOffset.x = e.clientX - nodeData.x;
+                    state.dragOffset.y = e.clientY - nodeData.y;
+                    state.velocity.x = 0;
+                    state.velocity.y = 0;
+
+                    if (state.animationId) cancelAnimationFrame(state.animationId);
+                    nodeEl.classList.add('dragging');
+                });
+
+                // 触控支持
+                nodeEl.addEventListener('touchstart', (e) => {
+                    if (e.touches.length === 1) {
+                        const touch = e.touches[0];
+                        state.draggedNode = nodeId;
+                        nodeData.isDragging = true;
+                        state.dragStart.x = touch.clientX;
+                        state.dragStart.y = touch.clientY;
+                        state.dragOffset.x = touch.clientX - nodeData.x;
+                        state.dragOffset.y = touch.clientY - nodeData.y;
+                        state.velocity.x = 0;
+                        state.velocity.y = 0;
+                        nodeEl.classList.add('dragging');
+                    }
+                });
+
+                container.appendChild(nodeEl);
+            });
+
+            guide.style.display = hasVisibleNode ? 'none' : 'block';
+            drawLines();
+        }
+
+        // 收展节点
+        function toggleCollapse(nodeId) {
+            if (state.collapsedNodes.has(nodeId)) {
+                state.collapsedNodes.delete(nodeId);
+            } else {
+                state.collapsedNodes.add(nodeId);
+            }
+            renderNodes();
+        }
+
+        // 展开全部
+        function expandAll() {
+            state.collapsedNodes.clear();
+            renderNodes();
+        }
+
+        // 收起全部非根节点
+        function collapseAll() {
+            state.nodes.forEach((nodeData, nodeId) => {
+                if (nodeData.children.length > 0 && nodeId !== 'root') {
+                    state.collapsedNodes.add(nodeId);
+                }
+            });
+            renderNodes();
+        }
+
+        // 鼠标移动拖动
+        document.addEventListener('mousemove', (e) => {
+            if (state.draggedNode) {
+                const nodeData = state.nodes.get(state.draggedNode);
+                const newX = e.clientX - state.dragOffset.x;
+                const newY = e.clientY - state.dragOffset.y;
+
+                state.velocity.x = newX - nodeData.x;
+                state.velocity.y = newY - nodeData.y;
+
+                nodeData.x = newX;
+                nodeData.y = newY;
+                renderNodes();
+            }
+        });
+
+        // 触控移动拖动
+        document.addEventListener('touchmove', (e) => {
+            if (state.draggedNode && e.touches.length === 1) {
+                const touch = e.touches[0];
+                const nodeData = state.nodes.get(state.draggedNode);
+                const newX = touch.clientX - state.dragOffset.x;
+                const newY = touch.clientY - state.dragOffset.y;
+
+                state.velocity.x = newX - nodeData.x;
+                state.velocity.y = newY - nodeData.y;
+
+                nodeData.x = newX;
+                nodeData.y = newY;
+                renderNodes();
+            }
+        }, { passive: true });
+
+        // 鼠标松开
+        document.addEventListener('mouseup', () => {
+            if (state.draggedNode) {
+                const nodeData = state.nodes.get(state.draggedNode);
+                nodeData.isDragging = false;
+                const nodeEl = document.getElementById(state.draggedNode);
+                nodeEl.classList.remove('dragging');
+
+                // 惯性动画
+                animateInertia(state.draggedNode);
+                state.draggedNode = null;
+            }
+        });
+
+        // 触控松开
+        document.addEventListener('touchend', () => {
+            if (state.draggedNode) {
+                const nodeData = state.nodes.get(state.draggedNode);
+                nodeData.isDragging = false;
+                const nodeEl = document.getElementById(state.draggedNode);
+                nodeEl.classList.remove('dragging');
+
+                animateInertia(state.draggedNode);
+                state.draggedNode = null;
+            }
+        });
+
+        // 惯性动画
+        function animateInertia(nodeId) {
+            const nodeData = state.nodes.get(nodeId);
+            const friction = 0.92;
+            let vx = state.velocity.x;
+            let vy = state.velocity.y;
+
+            function frame() {
+                if (Math.abs(vx) < 0.5 && Math.abs(vy) < 0.5) return;
+
+                vx *= friction;
+                vy *= friction;
+
+                nodeData.x += vx;
+                nodeData.y += vy;
+                renderNodes();
+
+                state.animationId = requestAnimationFrame(frame);
+            }
+
+            frame();
+        }
+
+        // 事件监听
+        document.getElementById('expandAllBtn').addEventListener('click', expandAll);
+        document.getElementById('collapseAllBtn').addEventListener('click', collapseAll);
+
+        // 初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            const container = document.getElementById('canvasContainer');
+            const centerX = container.clientWidth / 2 - 90;
+            const centerY = container.clientHeight / 2 - 55;
+
+            initializePositions(mindmapData, centerX, centerY);
+            renderNodes();
+
+            // 窗口大小改变时重绘连线
+            window.addEventListener('resize', () => {
+                drawLines();
+            });
+
+            // 滚动时重绘连线
+            container.addEventListener('scroll', () => {
+                drawLines();
+            });
+        });
+    </script>
+</body>
+</html>

@@ -62,6 +62,15 @@ function bare(code: string, key: string): ShortcutBinding {
   return { code, key, shift: false, ctrl: false, alt: false, meta: false }
 }
 
+/**
+ * Space is the fixed 下一题 key in the answering window. Modifier chords stay
+ * with the browser and with typing (Shift+Space is still a space character).
+ */
+export function isQuizSpaceKey(event: KeyboardEvent) {
+  if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return false
+  return event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar'
+}
+
 export const QUIZ_SHORTCUT_ACTIONS: QuizShortcutActionDefinition[] = [
   {
     id: 'previous_question',
@@ -74,7 +83,7 @@ export const QUIZ_SHORTCUT_ACTIONS: QuizShortcutActionDefinition[] = [
     id: 'next_question',
     group: 'navigate',
     label: '下一题',
-    description: '切到当前列表的下一题。',
+    description: '切到当前列表的下一题。空格是固定翻页键。',
     defaultBinding: bare('ArrowRight', 'arrowright'),
   },
   {
@@ -282,6 +291,16 @@ export interface QuizShortcutContext {
   editable: boolean
   recording: boolean
   enterOnUnrelatedControl: boolean
+  /**
+   * Space is aimed at a non-option control (关闭, 设置, 媒体按钮…). That control
+   * owns Space as its activation key, so the fixed 下一题 alias must not run.
+   */
+  spaceOnUnrelatedControl?: boolean
+  /**
+   * Space is aimed at an option button. Before the answer is visible it selects
+   * the option (native activation); afterwards it pages to the next question.
+   */
+  spaceOnOption?: boolean
 }
 
 export interface QuizShortcutMatch {
@@ -298,7 +317,16 @@ export function resolveQuizShortcutAction(
 ): QuizShortcutMatch | null {
   if (context.editable || context.recording || event.isComposing || event.key === 'Process') return null
   const matched = QUIZ_SHORTCUT_ACTIONS.find((action) => isShortcutPressed(event, shortcuts[action.id]))
-  if (!matched) return null
+  if (!matched) {
+    // Space pages to the next question even before the answer is revealed.
+    // A configured Space binding wins above; a focused control keeps Space
+    // (except an option button after the answer, the usual click-then-space path).
+    if (!isQuizSpaceKey(event)) return null
+    if (context.spaceOnUnrelatedControl) return null
+    if (!context.answerRevealed && context.spaceOnOption) return null
+    if (context.questionCount <= 1 || !context.hasNextQuestion) return null
+    return { id: 'next_question', run: !context.repeat }
+  }
 
   if (matched.id === 'toggle_mark' || matched.id === 'delete_question' || matched.id === 'reset_answer') {
     return { id: matched.id, run: !context.repeat }

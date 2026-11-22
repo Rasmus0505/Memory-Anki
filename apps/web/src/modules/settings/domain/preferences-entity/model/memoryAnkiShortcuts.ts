@@ -107,7 +107,7 @@ export const MEMORY_ANKI_SHORTCUT_ACTIONS: MemoryAnkiShortcutActionDefinition[] 
     id: 'page_next_card',
     scene: 'flip',
     label: '下一张',
-    description: '随心页翻到下一张卡。→ 也是固定翻页键；PageDown 同样可用。',
+    description: '随心页翻到下一张卡。空格、→ 和 PageDown 也是固定翻页键。',
     defaultBinding: binding('ArrowDown', 'arrowdown'),
   },
   {
@@ -123,9 +123,9 @@ export const MEMORY_ANKI_SHORTCUT_ACTIONS: MemoryAnkiShortcutActionDefinition[] 
  * Keys the 随心 canvas always owns. A flip action must never capture them: the
  * page-turn and view-pan contracts are fixed even when the map is rebound.
  *
- * Space is in the list without being a page key any more. It is the character a
- * learner types inside a card editor, so no flip action may take it; the feed
- * pages on PageUp / PageDown and ← / → only.
+ * Space pages forward as a fixed alias, but a flip action still must not take
+ * it: inside an open card editor Space is a typed character, and the keyboard
+ * guards (target checks + `data-mindmap-editor-active`) keep it that way.
  */
 export const RESERVED_FLIP_SHORTCUT_CODES = [
   'Space',
@@ -236,8 +236,9 @@ export function useMemoryAnkiShortcutMap() {
 
 /**
  * Page direction for the 随心 feed: the configured 上一张/下一张 binding first,
- * then the fixed ←/→ keys. PageUp/PageDown stay with the feed itself; Space is
- * not a page key (it belongs to whatever text the learner is typing).
+ * then the fixed ←/→ keys and bare Space. PageUp/PageDown stay with the feed
+ * itself. Space only pages when no modifier is held and the focused target does
+ * not own it; callers keep it away from text fields and open card editors.
  */
 export function resolveFlipCardPageDirection(
   event: KeyboardEvent,
@@ -247,6 +248,9 @@ export function resolveFlipCardPageDirection(
   if (isShortcutPressed(event, shortcuts.page_next_card)) return 'next'
   if (event.key === 'ArrowLeft') return 'previous'
   if (event.key === 'ArrowRight') return 'next'
+  const bareSpace = !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey
+    && (event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar')
+  if (bareSpace) return 'next'
   return null
 }
 

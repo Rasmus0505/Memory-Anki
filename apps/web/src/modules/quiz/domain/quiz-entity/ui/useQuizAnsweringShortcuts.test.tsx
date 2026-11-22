@@ -96,6 +96,76 @@ describe('useQuizAnsweringShortcuts', () => {
     expect(onNextQuestion).toHaveBeenCalledTimes(1)
   })
 
+  it('pages to the next question on bare Space', () => {
+    const onNextQuestion = vi.fn()
+    render(
+      <Harness
+        answerRevealed
+        onNextQuestion={onNextQuestion}
+        onToggleMark={() => {}}
+        onSelectOption={() => {}}
+      />,
+    )
+    fireEvent.keyDown(window, { key: ' ', code: 'Space' })
+    expect(onNextQuestion).toHaveBeenCalledTimes(1)
+
+    // Shift+Space is a typed space, not a page turn.
+    fireEvent.keyDown(window, { key: ' ', code: 'Space', shiftKey: true })
+    expect(onNextQuestion).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps Space on a focused option until the answer is visible', () => {
+    const onNextQuestion = vi.fn()
+    const { rerender } = render(
+      <Harness onNextQuestion={onNextQuestion} onToggleMark={() => {}} onSelectOption={() => {}} />,
+    )
+    const option = screen.getByRole('button', { name: 'A' })
+    option.focus()
+
+    const reachedBeforeReveal = fireEvent.keyDown(option, { key: ' ', code: 'Space' })
+    expect(reachedBeforeReveal).toBe(true)
+    expect(onNextQuestion).not.toHaveBeenCalled()
+
+    rerender(
+      <Harness
+        answerRevealed
+        onNextQuestion={onNextQuestion}
+        onToggleMark={() => {}}
+        onSelectOption={() => {}}
+      />,
+    )
+    const reachedAfterReveal = fireEvent.keyDown(screen.getByRole('button', { name: 'A' }), {
+      key: ' ',
+      code: 'Space',
+    })
+    expect(reachedAfterReveal).toBe(false)
+    expect(onNextQuestion).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves Space to a focused toolbar button', () => {
+    const onNextQuestion = vi.fn()
+    render(
+      <div>
+        <Harness answerRevealed onNextQuestion={onNextQuestion} onToggleMark={() => {}} onSelectOption={() => {}} />
+        <button type="button">设置</button>
+      </div>,
+    )
+    fireEvent.keyDown(screen.getByRole('button', { name: '设置' }), { key: ' ', code: 'Space' })
+    expect(onNextQuestion).not.toHaveBeenCalled()
+  })
+
+  it('does not page on Space while typing', () => {
+    const onNextQuestion = vi.fn()
+    render(
+      <div>
+        <Harness answerRevealed onNextQuestion={onNextQuestion} onToggleMark={() => {}} onSelectOption={() => {}} />
+        <input aria-label="答案" />
+      </div>,
+    )
+    fireEvent.keyDown(screen.getByLabelText('答案'), { key: ' ', code: 'Space' })
+    expect(onNextQuestion).not.toHaveBeenCalled()
+  })
+
   it('opens delete from Backspace unless the learner is still typing', () => {
     const onDeleteQuestion = vi.fn()
     const { rerender } = render(

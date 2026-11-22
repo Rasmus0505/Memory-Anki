@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   getFreestyleChoiceIndex,
   getFreestyleFeedPageDirection,
+  isFreestyleControlOwnedSpace,
   isFreestyleOverlayOpen,
   isFreestyleShortcutBlocked,
   shouldSwallowFreestyleFeedPageKey,
@@ -17,10 +18,11 @@ describe('freestyle keyboard shortcuts', () => {
     expect(getFreestyleChoiceIndex('e')).toBeNull()
   })
 
-  it('keeps PageUp/PageDown as fixed feed paging keys and never binds Space', () => {
+  it('keeps PageUp/PageDown as fixed feed paging keys; Space is resolved by the flip map', () => {
     expect(getFreestyleFeedPageDirection('PageUp')).toBe('previous')
     expect(getFreestyleFeedPageDirection('PageDown')).toBe('next')
-    // Space belongs to typing (a card can be in inline edit), so it pages nothing.
+    // Space pages through resolveFlipCardPageDirection, which owns its modifier
+    // rule; this helper stays the PageUp/PageDown-only fallback.
     expect(getFreestyleFeedPageDirection(' ')).toBeNull()
     expect(getFreestyleFeedPageDirection('Spacebar')).toBeNull()
     // Arrows come from the configurable 翻卡快捷键 map, not this helper.
@@ -37,6 +39,27 @@ describe('freestyle keyboard shortcuts', () => {
       expect(direction).toBeNull()
     } finally {
       scope.remove()
+    }
+  })
+
+  it('leaves Space to a focused control so it still activates that control', () => {
+    const button = document.createElement('button')
+    const link = document.createElement('a')
+    const roleButton = document.createElement('div')
+    roleButton.setAttribute('role', 'button')
+    const card = document.createElement('div')
+    document.body.append(button, link, roleButton, card)
+    try {
+      expect(isFreestyleControlOwnedSpace({ key: ' ', code: 'Space' }, button)).toBe(true)
+      expect(isFreestyleControlOwnedSpace({ key: ' ', code: 'Space' }, link)).toBe(true)
+      expect(isFreestyleControlOwnedSpace({ key: ' ', code: 'Space' }, roleButton)).toBe(true)
+      expect(isFreestyleControlOwnedSpace({ key: ' ', code: 'Space' }, card)).toBe(false)
+      expect(isFreestyleControlOwnedSpace({ key: 'PageDown', code: 'PageDown' }, button)).toBe(false)
+    } finally {
+      button.remove()
+      link.remove()
+      roleButton.remove()
+      card.remove()
     }
   })
 

@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#fff4f6">
+<link rel="icon" href="data:,">
+<title>蜜桃果冻 · 按压体验</title>
+<style>
+* { box-sizing: border-box }
+body { margin: 0; color: #542338; background: radial-gradient(ellipse at 50% 54%, #ffe1dc 0%, #fff1f1 45%, #fff8fa 80%); font: 16px/1.5 system-ui, 'Microsoft YaHei', sans-serif }
+main { width: min(54rem, 100%); min-height: 100svh; margin: auto; padding: clamp(20px,5vw,54px); display: flex; flex-direction: column }
+header { display: flex; align-items: center; justify-content: space-between; gap: 16px }
+h1 { margin: 0; font-size: clamp(22px,4vw,34px); font-weight: 750; letter-spacing: -.04em }
+button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent }
+button:focus-visible { outline: 3px solid #7b3552; outline-offset: 6px }
+#sound { display: inline-flex; align-items: center; gap: 9px; padding: 10px 13px; border: 1px solid #d6afb9; border-radius: 24px; background: #fff8fa; font-size: 14px }
+.switch { width: 28px; height: 16px; border-radius: 12px; background: #ad8a95; padding: 3px }
+.switch::after { content: ''; display: block; background: white; width: 10px; height: 10px; border-radius: 50% }
+#sound[aria-checked=true] .switch { background: #ac3a60 }
+#sound[aria-checked=true] .switch::after { transform: translateX(12px) }
+.scene { flex: 1; min-height: 385px; display: grid; align-content: center; justify-items: center; gap: clamp(12px,2vh,25px); text-align: center }
+.readout { display: inline-flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; font-size: 14px; color: #79485b }
+.readout::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #ae657d }
+.readout[data-active=true]::before { background: #ce305c; box-shadow: 0 0 0 4px #efb6c780 }
+#duration { border-left: 1px solid #dabac4; padding-left: 10px; min-width: 6ch }
+.stage { width: min(100%, 450px); aspect-ratio: 450 / 225; position: relative; isolation: isolate }
+.plate, .shadow, .halo, .ripple { position: absolute; left: 50%; translate: -50% 0; border-radius: 50%; pointer-events: none }
+.plate { width: 92%; height: 44%; bottom: 2%; border: 2px solid #fffafa; background: radial-gradient(ellipse, #f9d6d280 40%, #fff8f466 65%, #eac6c780 69%, #fff9fa9c 73%); box-shadow: inset 0 -4px 4px #d2a9b088, 0 4px 0 #d5b6bb88, 0 10px 17px -5px #a8657a33 }
+.shadow { width: 52%; height: 21%; bottom: 12%; background: radial-gradient(ellipse, #9c294d88, #bc527344 52%, transparent 73%); filter: blur(3px) }
+.halo, .ripple { width: 62%; height: 28%; bottom: 12%; opacity: 0; border: 2px solid #ec86a38a }
+.halo { box-shadow: 0 0 10px 4px #ffa8bc8c, inset 0 0 6px #ffa8bc88 }
+/* 固定命中区域。果冻以底部为支点伸缩，碟子和焦点框保持静止。 */
+#jelly { position: absolute; width: 58%; height: 64%; left: 21%; bottom: 17%; border: 0; background: transparent; border-radius: 40%; padding: 0; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none }
+.body { display: grid; place-items: center; position: absolute; inset: 0; overflow: hidden; isolation: isolate; transform-origin: 50% 94%; border-radius: 38% 38% 44% 45% / 44% 44% 28% 28%; border: 1px solid #ffcac3; background: radial-gradient(ellipse at 51% 88%, #ffcf8fd6, transparent 42%), radial-gradient(ellipse at 22% 48%, #ffd0a7ad, transparent 29%), linear-gradient(180deg,#ffc8b4ee 4%,#ff9d9bdc 28%,#fb7b8edc 56%,#df466ce5 83%,#ffab96ed); box-shadow: inset 2px 4px 4px #fff4e5a8, inset -7px -11px 13px #c8436555, inset 5px -3px 5px #ffbdbd, 0 3px 4px #ae506348; pointer-events: none }
+/* 模具的纵向凹槽在上下边缘收拢。顶部单独受光，形成圆润的厚边。 */
+.flutes { position: absolute; inset: 18% -3% 2%; border-radius: 35%; background: repeating-linear-gradient(94deg,transparent 0% 7%,#bd285c26 12%,#ffe3bc63 16%,transparent 20%); box-shadow: inset 0 -4px 5px #ffc3a38c }
+.top { position: absolute; inset: 1% 7% auto; height: 34%; border-radius: 50%; background: radial-gradient(ellipse at 45% 25%,#ffe8cda6,transparent 65%), linear-gradient(160deg,#ffc8b4,#ffad92 55%,#ffb6af); box-shadow: inset 1px 3px 4px #fff3d9bd, 0 2px 3px #ffe3cd99, 0 5px 7px #cb46602e }
+.tint { position: absolute; inset: 0; background: linear-gradient(160deg,#ff714a55,#ce164789); opacity: 0 }
+.glint { position: absolute; top: 9%; left: 22%; width: 27%; height: 8%; border-radius: 50%; background: radial-gradient(ellipse, #fffdf4 10%, #fff3d9bc 42%,transparent 73%); transform: rotate(-8deg); opacity: .83 }
+.bubbles { position: absolute; inset: 0; background: radial-gradient(circle at 20% 52%,#fff4e9a8 1px,transparent 3px),radial-gradient(circle at 24% 58%,#fff4e97a 2px,transparent 4px),radial-gradient(circle at 76% 68%,#ffe3ce88 1px,transparent 3px),radial-gradient(circle at 78% 63%,#fff1da77 2px,transparent 4px) }
+.wave { position: absolute; left: 17%; top: 5%; width: 66%; height: 33%; border-radius: 50%; border: 2px solid #fff3db; opacity: 0 }
+.label { position: relative; margin-top: 12%; font-size: clamp(21px,4vw,30px); font-weight: 750; color: #63233a; text-shadow: 0 1px 1px #ffd5cf; letter-spacing: .06em }
+.hint { color: #77495a; margin: 10px 0 0; font-size: 15px }
+@media (prefers-reduced-motion:reduce) { .body,.glint { transform: none !important } .wave,.ripple,.halo { display: none } .tint { transition: opacity 100ms linear } }
+</style>
+</head>
+<body>
+<main>
+<header><h1>蜜桃果冻</h1><button id="sound" type="button" role="switch" aria-checked="false">音效<span class="switch" aria-hidden="true"></span></button></header>
+<section class="scene" aria-label="果冻按压体验">
+<div class="readout"><span id="state" role="status" lang="en">idle</span><span id="duration" aria-label="按住时长">0.00 s</span></div>
+<div class="stage"><div class="plate"></div><div class="shadow"></div><div class="halo"></div><div class="ripple"></div>
+<button id="jelly" type="button" aria-describedby="hint"><span class="body"><span class="flutes"></span><span class="top"></span><span class="bubbles"></span><span class="tint"></span><span class="glint"></span><span class="wave"></span><span class="wave"></span><span class="label">按住我</span></span></button>
+</div><p class="hint" id="hint">轻按一下，再试试按住两秒。</p>
+</section></main>
+<script>
+'use strict';
+(() => {
+  const config = Object.freeze({
+    pressTime: .105, chargeTime: 2, pressDepth: .105, chargeDepth: .12,
+    breath: .011, breathHz: 2.4, haloPeriod: 1.15,
+    stiffness: 740, damping: 4.5, frequencyDrop: .22,
+    overshoot: .10, chargedOvershoot: .34, settlingAt: .21, releaseTime: 1.06,
+    rippleTime: .60, secondWaveDelay: .15, lightReach: 46
+  });
+  const $ = selector => document.querySelector(selector);
+  const button = $('#jelly'), state = $('#state'), duration = $('#duration'), sound = $('#sound');
+  const body = $('.body'), tint = $('.tint'), glint = $('.glint'), halo = $('.halo'), ripple = $('.ripple');
+  const waves = [...document.querySelectorAll('.wave')];
+  const motion = matchMedia('(prefers-reduced-motion: reduce)');
+  const clamp = x => Math.min(1, Math.max(0, x));
+  let phase = 'idle', owner = null, frame = 0, start = 0, held = 0, charge = 0;
+  let stretch = 0, initial = 0, lightX = 0, lightY = 0, audio;
+
+  function setPhase(next) {
+    if (phase === next) return;
+    phase = next;
+    state.textContent = next;
+    state.parentElement.dataset.active = String(next !== 'idle');
+  }
+  function schedule() { if (!frame) frame = requestAnimationFrame(draw); }
+  function hideRings() {
+    for (const layer of [halo, ripple, ...waves]) layer.style.opacity = '0';
+  }
+  function reset() {
+    owner = null;
+    cancelAnimationFrame(frame);
+    frame = 0;
+    stretch = 0;
+    duration.textContent = '0.00 s';
+    setPhase('idle');
+    hideRings();
+    paint(0, 0);
+  }
+  function paint(depth, shine) {
+    // 横向按纵向的平方根倒数伸缩，近似保持三维体积。
+    const height = 1 + stretch;
+    body.style.transform = `scale(${1 / Math.sqrt(height)}, ${height})`;
+    tint.style.opacity = String(depth);
+    glint.style.opacity = String(.82 + .18 * shine);
+    glint.style.transform = `translate(${lightX}px,${lightY}px) rotate(-8deg) scale(${1 - .30 * shine})`;
+  }
+  function draw(now) {
+    frame = 0;
+    const t = Math.max(0, (now - start) / 1000);
+    if (owner !== null) {
+      // 按下时快速展宽，随后按时长加深挤压并轻微呼吸。
+      held = t;
+      charge = clamp(t / config.chargeTime);
+      const press = 1 - (1 - clamp(t / config.pressTime)) ** 3;
+      const breath = Math.sin(t * 2 * Math.PI * config.breathHz) * config.breath * charge;
+      stretch = initial * (1 - press) - press * (config.pressDepth + config.chargeDepth * charge) + breath;
+      if (t >= config.pressTime) setPhase('charging');
+      const pulse = (Math.max(0, t - config.pressTime) / config.haloPeriod) % 1;
+      halo.style.transform = `scale(${.85 + .78 * pulse})`;
+      halo.style.opacity = String(Math.sin(Math.PI * pulse) * (.35 + .55 * charge));
+      const timeText = `${t.toFixed(2)} s`;
+      if (duration.textContent !== timeText) duration.textContent = timeText;
+      paint(.23 * press + .61 * charge, press);
+    } else if (phase === 'releasing' || phase === 'settling') {
+      // 从松手时的实际形变出发。连续相位令频率略降，指数包络令峰值逐次衰减。
+      const omega = Math.sqrt(config.stiffness);
+      const angle = omega * (t - config.frequencyDrop * t * t / (2 * config.releaseTime));
+      const envelope = Math.exp(-config.damping * t) * (1 - clamp(t / config.releaseTime) ** 3);
+      const impulse = config.overshoot + config.chargedOvershoot * charge;
+      stretch = envelope * (initial * Math.cos(angle) + impulse * Math.sin(angle));
+      paint((.23 + .61 * charge) * Math.exp(-14 * t), Math.exp(-12 * t));
+      if (t >= config.settlingAt) setPhase('settling');
+      // 碟面只扩散一圈。表面的两道反光波错开，均在 600ms 内消失。
+      const progress = clamp(t / config.rippleTime);
+      ripple.style.transform = `scale(${.72 + progress * (.64 + .42 * charge)})`;
+      ripple.style.opacity = String((1 - progress) ** 2 * (.52 + .45 * charge));
+      waves.forEach((wave, i) => {
+        const delay = i * config.secondWaveDelay;
+        const p = clamp((t - delay) / (config.rippleTime - delay));
+        wave.style.transform = `translateY(${p * 68}%) scale(${.48 + .94 * p})`;
+        wave.style.opacity = String(Math.sin(Math.PI * p) * (1 - p) * (.45 + .40 * charge));
+      });
+      if (t >= config.releaseTime) { reset(); return; }
+    } else { paint(0, 0); return; }
+    schedule();
+  }
+
+  // 只有显式开启音效后才建立音频上下文。每个啵声有独立的短音高滑动与音量包络。
+  function mute() { sound.setAttribute('aria-checked', 'false'); }
+  sound.addEventListener('click', async () => {
+    if (sound.getAttribute('aria-checked') === 'true') { mute(); return; }
+    try {
+      audio ??= new (window.AudioContext || window.webkitAudioContext)();
+      sound.setAttribute('aria-checked', 'true');
+      await audio.resume();
+    } catch { mute(); sound.textContent = '音效不可用'; sound.disabled = true; }
+  });
+  function pop(released) {
+    if (!audio || audio.state !== 'running' || sound.getAttribute('aria-checked') !== 'true') return;
+    const osc = audio.createOscillator(), gain = audio.createGain(), t = audio.currentTime;
+    const pitch = released ? 440 + 240 * charge : 235;
+    osc.frequency.setValueAtTime(pitch, t);
+    osc.frequency.exponentialRampToValueAtTime(pitch * (released ? 1.28 : .83), t + .016);
+    osc.frequency.exponentialRampToValueAtTime(pitch * .47, t + .105);
+    gain.gain.setValueAtTime(.0001, t);
+    gain.gain.exponentialRampToValueAtTime(.13, t + .005);
+    gain.gain.exponentialRampToValueAtTime(.0001, t + .128);
+    osc.connect(gain).connect(audio.destination);
+    osc.onended = () => { osc.disconnect(); gain.disconnect(); };
+    osc.start(t); osc.stop(t + .13);
+  }
+  function begin(source) {
+    if (owner !== null) return;
+    owner = source;
+    initial = stretch;
+    start = performance.now();
+    held = charge = 0;
+    duration.textContent = '0.00 s';
+    hideRings(); setPhase('pressing'); pop(false); schedule();
+  }
+  function end(source) {
+    if (source !== owner) return;
+    const now = performance.now();
+    held = (now - start) / 1000;
+    charge = clamp(held / config.chargeTime);
+    duration.textContent = `${held.toFixed(2)} s`;
+    owner = null; initial = stretch; start = now;
+    halo.style.opacity = '0';
+    setPhase('releasing'); pop(true); schedule();
+  }
+  function aim(event) {
+    if (motion.matches || (owner !== null && owner !== event.pointerId)) return;
+    const r = button.getBoundingClientRect();
+    lightX = (clamp((event.clientX - r.left) / r.width) - .5) * config.lightReach;
+    lightY = (clamp((event.clientY - r.top) / r.height) - .5) * config.lightReach * .42;
+    schedule();
+  }
+  button.addEventListener('pointermove', aim);
+  button.addEventListener('pointerleave', () => { lightX = lightY = 0; schedule(); });
+  button.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || owner !== null || !event.isPrimary) return;
+    button.setPointerCapture(event.pointerId); aim(event); begin(event.pointerId);
+  });
+  button.addEventListener('pointerup', event => end(event.pointerId));
+  for (const type of ['pointercancel','lostpointercapture']) {
+    button.addEventListener(type, event => { if (owner === event.pointerId) reset(); });
+  }
+  button.addEventListener('contextmenu', event => event.preventDefault());
+  const activationKey = key => key === ' ' || key === 'Enter';
+  button.addEventListener('keydown', event => {
+    if (activationKey(event.key)) { event.preventDefault(); if (!event.repeat) begin(event.key); }
+  });
+  button.addEventListener('keyup', event => {
+    if (activationKey(event.key)) { event.preventDefault(); end(event.key); }
+  });
+  button.addEventListener('click', event => {
+    // 辅助技术可能直接激活按钮，没有成对的按键事件。
+    if (event.detail === 0 && phase === 'idle') { begin('activation'); end('activation'); }
+  });
+  button.addEventListener('blur', () => { if (owner !== null) reset(); });
+  window.addEventListener('blur', reset);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) reset(); });
+})();
+</script>
+</body>
+</html>

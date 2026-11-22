@@ -31,6 +31,7 @@ import {
 import { resolveFreestyleCompleteAction } from '@/modules/practice/ui/freestyle/model/feedCompletion'
 import {
   getFreestyleFeedPageDirection,
+  isFreestyleControlOwnedSpace,
   isFreestyleShortcutBlocked,
   shouldSwallowFreestyleFeedPageKey,
 } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
@@ -656,6 +657,8 @@ export function useFreestyleFeedNavigation({
         return
       }
       if (!direction) return
+      // A focused button/link owns bare Space as activation; do not page.
+      if (isFreestyleControlOwnedSpace(event.nativeEvent, event.target)) return
       event.preventDefault()
       if (direction === 'previous') navigatePrevious()
       else navigateNext()

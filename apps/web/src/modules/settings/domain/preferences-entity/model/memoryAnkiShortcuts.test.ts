@@ -106,6 +106,19 @@ describe('memoryAnkiShortcuts', () => {
         shortcuts,
       ),
     ).toBe('previous')
+    expect(
+      resolveFlipCardPageDirection(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space' }),
+        shortcuts,
+      ),
+    ).toBe('next')
+    // Shift+Space is a typed space, never a page turn.
+    expect(
+      resolveFlipCardPageDirection(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', shiftKey: true }),
+        shortcuts,
+      ),
+    ).toBeNull()
     const custom = {
       ...shortcuts,
       page_next_card: { code: 'KeyJ', key: 'j', shift: false, ctrl: false, alt: false, meta: false },

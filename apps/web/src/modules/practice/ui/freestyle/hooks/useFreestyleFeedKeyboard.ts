@@ -4,6 +4,7 @@ import {
   useMemoryAnkiShortcutMap,
 } from '@/modules/settings/public'
 import {
+  isFreestyleControlOwnedSpace,
   isFreestyleOverlayOpen,
   isFreestyleShortcutBlocked,
 } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
@@ -38,6 +39,8 @@ export function useFreestyleFeedKeyboard({
       ) return
       const direction = resolveFlipCardPageDirection(event, shortcuts)
       if (!direction) return
+      // Space activates a focused button/link; the page turn must not steal it.
+      if (isFreestyleControlOwnedSpace(event, event.target)) return
       event.preventDefault()
       if (direction === 'previous') {
         navigatePrevious()

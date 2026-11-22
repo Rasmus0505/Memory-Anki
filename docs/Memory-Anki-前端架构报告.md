@@ -276,7 +276,7 @@ JSX `<Routes>` 表仍然手写，但由 `routeManifest.test.ts` 对账，防止�
 - 信息流是 `snap-y snap-mandatory` 的纵向吸附容器；
 - 滚轮每格翻一张卡，触控板惯性合并；
 - 手指翻页只在滚动稳定后提交 `active`；
-- 空格留给卡片内输入，不翻页；
+- 空格翻到下一张；焦点在按钮/链接上时留给控件激活；
 - 编辑会话打开时（`data-mindmap-editor-active`），所有翻页/翻卡/评分键暂停。
 
 ### 8.6 状态机

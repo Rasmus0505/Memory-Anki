@@ -54,16 +54,23 @@ function FeedWithQuizDialog() {
 }
 
 describe('freestyle feed paging under a quiz dialog', () => {
-  it('never turns the card on Space, and PageDown still pages', () => {
+  it('turns to the next card on Space, and PageDown still pages', () => {
     render(<FeedSurface />)
     const feed = screen.getByTestId('feed')
     feed.focus()
-    // Space is the character typed inside a card editor; it must not page.
     fireEvent.keyDown(feed, { key: ' ', code: 'Space' })
-    expect(screen.getByTestId('feed').dataset.pages).toBe('0')
-    // PageDown is still the fixed page key.
-    fireEvent.keyDown(feed, { key: 'PageDown', code: 'PageDown' })
     expect(screen.getByTestId('feed').dataset.pages).toBe('1')
+    fireEvent.keyDown(feed, { key: 'PageDown', code: 'PageDown' })
+    expect(screen.getByTestId('feed').dataset.pages).toBe('2')
+  })
+
+  it('does not turn the card on Space while a button is focused', () => {
+    render(<FeedSurface />)
+    const card = screen.getByRole('button', { name: '卡片' })
+    card.focus()
+    // Space is the focused button's activation key, not a feed page key.
+    fireEvent.keyDown(card, { key: ' ', code: 'Space' })
+    expect(screen.getByTestId('feed').dataset.pages).toBe('0')
   })
 
   it('does not page while a card editor is open even if focus left the editor', () => {

@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>果冻按钮 · Reactive Jelly</title>
+<style>
+/* ============================================================================
+   果冻按钮 —— 单文件实现，无任何外部依赖
+   ----------------------------------------------------------------------------
+   结构：
+     .stage     居中舞台
+     .readout   状态机读数（idle / pressing / charging / releasing / settling）+ 弹簧轨迹
+     .rig       果冻本体 + 环境阴影 + 蓄力光环 + 释放特效
+     .controls  糖果色切换 + 音效开关
+
+   所有形变都由 JS 每帧写入 CSS 变量，CSS 只负责「材质」：
+     --sx/--sy  水平/垂直缩放（体积守恒的两种形变）
+     --ty       下压位移
+     --sk       余震剪切角
+     --k        挤压深度 0..1（颜色变深、高光收缩）
+     --ch       蓄力进度 0..1（饱和度上升、呼吸光环）
+     --hx/--hy  镜面高光位置（跟随指针）
+     --glow     释放瞬间的亮度脉冲
+     --wobA     轮廓圆角的不对称晃动
+   ========================================================================== */
+
+/* 主题色只存色相，切换颜色时三个色相一起做补间，整套渐变会平滑地换色 */
+@property --h1 { syntax: "<number>"; inherits: true; initial-value: 342; }
+@property --h2 { syntax: "<number>"; inherits: true; initial-value: 20; }
+@property --h3 { syntax: "<number>"; inherits: true; initial-value: 318; }
+
+:root {
+  --h1: 342;   /* 主色相 */
+  --h2: 20;    /* 受光色相 */
+  --h3: 318;   /* 暗部色相 */
+  transition: --h1 .55s ease, --h2 .55s ease, --h3 .55s ease;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+html, body { min-height: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  overscroll-behavior: none;
+  font-family: "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: hsl(var(--h1) 30% 34%);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  background:
+    radial-gradient(120% 80% at 50% -12%, hsl(var(--h2) 100% 98%) 0%, transparent 55%),
+    radial-gradient(100% 70% at 50% 112%, hsl(var(--h3) 46% 90%) 0%, transparent 58%),
+    radial-gradient(130% 110% at 50% 48%, hsl(var(--h1) 58% 96%) 0%, hsl(var(--h1) 40% 93%) 100%);
+}
+
+/* 极轻的胶片颗粒，避免大面积渐变出现色带 */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: .35;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
+}
+
+/* ---------------------------------------------------------------- 舞台布局 */
+.stage {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(28px, 5.5vh, 46px);
+  padding: 32px 24px calc(32px + env(safe-area-inset-bottom));
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ---------------------------------------------------------------- 状态读数 */
+.readout {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 24px;
+  font: 600 11px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: hsl(var(--h1) 24% 46% / .78);
+}
+.state {
+  min-width: 9.2ch;
+  color: hsl(var(--h1) 52% 44%);
+  transition: color .18s ease;
+}
+.state[data-state="pressing"] { color: hsl(var(--h1) 62% 46%); }
+.state[data-state="charging"] { color: hsl(var(--h1) 78% 44%); }
+.state[data-state="releasing"] { color: hsl(var(--h2) 78% 44%); }
+.state[data-state="settling"]  { color: hsl(var(--h2) 55% 48%); }
+
+.held {
+  min-width: 4.6ch;
+  font-variant-numeric: tabular-nums;
+  opacity: .55;
+}
+
+/* 弹簧位移示波器：把「过冲 → 回弹 → 余震」画成一条实时曲线 */
+.trace {
+  width: 84px;
+  height: 24px;
+  opacity: 0;
+  transition: opacity .34s ease;
+  overflow: visible;
+}
+.readout[data-live="true"] .trace { opacity: .85; }
+.trace line {
+  stroke: currentColor;
+  stroke-width: 1;
+  stroke-dasharray: 1.5 3.5;
+  opacity: .35;
+}
+.trace polyline {
+  fill: none;
+  stroke: hsl(var(--h1) 64% 52%);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* ---------------------------------------------------------------- 果冻舞台 */
+.rig {
+  /* JS 每帧改写的形变通道；这里的默认值保证首帧就是静止的果冻 */
+  --sx: 1; --sy: 1; --ty: 0px; --sk: 0deg;
+  --k: 0; --ch: 0;
+  --hx: 34%; --hy: 26%;
+  --sr: 42%; --so: .7;
+  --glow: 0; --wobA: 0px;
+  --rad: calc(clamp(250px, 62vw, 306px) * 0.196);
+
+  position: relative;
+  z-index: 0;
+  width: clamp(250px, 62vw, 306px);
+  aspect-ratio: 2.56 / 1;
+}
+
+/* 地面环境阴影：下压时收紧变实，回弹时摊开变虚 */
+.ambient {
+  position: absolute;
+  left: 50%;
+  bottom: -11%;
+  width: 82%;
+  height: 30%;
+  z-index: 0;
+  border-radius: 50%;
+  transform: translateX(-50%) translateY(var(--ty)) scale(calc(var(--sx) * 1.02), calc(1 + var(--k) * .35));
+  background: radial-gradient(50% 50% at 50% 50%,
+    hsl(var(--h3) 70% 40% / calc(.34 + var(--k) * .22)) 0%,
+    hsl(var(--h3) 70% 42% / calc(.16 + var(--k) * .1)) 45%,
+    transparent 72%);
+  filter: blur(9px);
+  pointer-events: none;
+}
+
+/* 蓄力光环：两枚错相位的柔光椭圆，缓慢向外扩散（位移/透明度由 rAF 驱动） */
+.halo {
+  position: absolute;
+  inset: -7%;
+  z-index: 0;
+  border-radius: 999px;
+  border: 2px solid hsl(var(--h1) 92% 68% / .55);
+  box-shadow:
+    0 0 18px hsl(var(--h1) 95% 70% / .35),
+    inset 0 0 14px hsl(var(--h1) 95% 76% / .22);
+  filter: blur(2.5px);
+  opacity: 0;
+  transform-origin: 50% 100%;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* 蓄力时贴身的暖光晕 */
+.bloom {
+  position: absolute;
+  inset: -20%;
+  z-index: 0;
+  border-radius: 999px;
+  background: radial-gradient(50% 55% at 50% 55%,
+    hsl(var(--h1) 96% 74% / .30) 0%,
+    hsl(var(--h1) 96% 72% / .12) 46%,
+    transparent 72%);
+  filter: blur(7px);
+  opacity: 0;
+  transform-origin: 50% 100%;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* ---------------------------------------------------------------- 果冻本体 */
+.jelly {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  cursor: pointer;
+  overflow: hidden;
+  isolation: isolate;
+
+  /* 圆角同时承载轮廓的「余震晃动」：对角半径反向偏移，表面像被拨了一下 */
+  border-radius:
+    calc(var(--rad) + var(--wobA))
+    calc(var(--rad) - var(--wobA))
+    calc(var(--rad) + var(--wobA))
+    calc(var(--rad) - var(--wobA));
+
+  transform: translateY(var(--ty)) skewX(var(--sk)) scale(var(--sx), var(--sy));
+  transform-origin: 50% 100%;   /* 以底边为支点：按下去像压进桌面 */
+  will-change: transform;
+
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+
+  /* 材质：环境光 → 左上透光核 → 左下内部折射 → 底部沉淀 → 主胶体 */
+  background:
+    linear-gradient(180deg, hsl(0 0% 100% / .42) 0%, transparent 32%),
+    radial-gradient(48% 66% at 28% 12%,
+      hsl(var(--h2) 100% calc(92% - var(--k) * 12%) / .88) 0%, transparent 60%),
+    radial-gradient(38% 62% at 24% 96%,
+      hsl(var(--h2) 100% calc(90% - var(--k) * 10%) / .5) 0%, transparent 62%),
+    radial-gradient(90% 96% at 66% 122%,
+      hsl(var(--h3) 92% calc(38% - var(--k) * 4%) / .7) 0%, transparent 64%),
+    radial-gradient(64% 120% at 92% 44%,
+      hsl(var(--h3) 92% 60% / .3) 0%, transparent 54%),
+    linear-gradient(168deg,
+      hsl(var(--h2) calc(96% + var(--ch) * 4%) calc(80% - var(--k) * 15%)) 0%,
+      hsl(var(--h1) calc(92% + var(--ch) * 8%) calc(68% - var(--k) * 17%)) 48%,
+      hsl(var(--h1) calc(90% + var(--ch) * 8%) calc(62% - var(--k) * 18%)) 66%,
+      hsl(var(--h3) calc(88% + var(--ch) * 8%) calc(54% - var(--k) * 20%)) 100%);
+
+  /* 厚度：顶缘亮线、底部深沉积、左右内反射、体内透光、贴地与悬空两层投影 */
+  box-shadow:
+    inset 0 2px 1px hsl(0 0% 100% / .9),
+    inset 0 -18px 26px -12px hsl(var(--h3) 95% 26% / calc(.55 + var(--k) * .16)),
+    inset 9px 0 18px -14px hsl(0 0% 100% / .85),
+    inset -9px 0 18px -14px hsl(0 0% 100% / .5),
+    inset 0 0 calc(30px + var(--ch) * 26px) hsl(var(--h2) 100% 84% / calc(.26 + var(--ch) * .3)),
+    inset 0 0 0 1px hsl(var(--h3) 62% 48% / .16),
+    0 20px 36px -10px hsl(var(--h3) 72% 38% / calc(.32 + var(--k) * .14)),
+    0 6px 12px -2px hsl(var(--h3) 74% 38% / .22);
+
+  /* 蓄力时饱和度上升；释放瞬间亮度脉冲 */
+  filter: brightness(calc(1 + var(--glow) * .08)) saturate(calc(1 + var(--ch) * .16));
+  transition: border-radius .06s linear;
+}
+
+.jelly:focus-visible {
+  outline: 2px solid hsl(var(--h1) 60% 52% / .85);
+  outline-offset: 10px;
+}
+
+/* 镜面高光：跟随指针的椭圆光斑，按压时收缩变亮；附带一颗锐利的小反光点 */
+.jelly::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(calc(var(--sr) * 1.5) var(--sr) at var(--hx) var(--hy),
+      hsl(0 0% 100% / var(--so)) 0%,
+      hsl(0 0% 100% / calc(var(--so) * .34)) 36%,
+      transparent 70%),
+    radial-gradient(6% 10% at calc(var(--hx) + 12%) calc(var(--hy) + 8%),
+      hsl(0 0% 100% / .95) 0%, transparent 72%);
+}
+
+/* 顶部弧形反光条：第二道静态高光，撑起「表皮」的厚度 */
+.jelly::after {
+  content: "";
+  position: absolute;
+  left: 9%;
+  right: 9%;
+  top: 5%;
+  height: 36%;
+  z-index: 2;
+  border-radius: 60% 60% 42% 42% / 100% 100% 58% 58%;
+  background: linear-gradient(180deg,
+    hsl(0 0% 100% / .5) 0%,
+    hsl(0 0% 100% / .13) 58%,
+    transparent 100%);
+  filter: blur(.5px);
+  opacity: calc(.95 - var(--k) * .42);
+  transform: scaleY(calc(1 - var(--k) * .34)) translateY(calc(var(--k) * 4px));
+  transform-origin: top center;
+  pointer-events: none;
+}
+
+/* 体内底部的透光（果冻厚度的「底色」） */
+.under {
+  position: absolute;
+  left: 11%;
+  right: 11%;
+  bottom: -8%;
+  height: 55%;
+  z-index: 1;
+  border-radius: 50%;
+  background: radial-gradient(50% 100% at 50% 100%,
+    hsl(var(--h2) 100% 88% / calc(.55 + var(--ch) * .32)) 0%,
+    transparent 72%);
+  filter: blur(8px);
+  opacity: calc(.9 - var(--k) * .25);
+  pointer-events: none;
+}
+
+/* 胶体里的小气泡：极轻的漂浮，佐证「半透明体积」 */
+.bubble {
+  position: absolute;
+  z-index: 2;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%,
+    hsl(0 0% 100% / .85) 0%, hsl(0 0% 100% / .16) 55%, transparent 72%);
+  pointer-events: none;
+  animation: bob 7s ease-in-out infinite alternate;
+}
+.b1 { width: 10px; height: 10px; left: 23%; top: 60%; opacity: .26; animation-delay: -2s; }
+.b2 { width: 6px; height: 6px; left: 69%; top: 33%; opacity: .18; animation-delay: -4.5s; }
+.b3 { width: 14px; height: 14px; left: 77%; top: 66%; opacity: .14; animation-delay: -1s; }
+@keyframes bob {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-4px); }
+}
+
+/* 释放瞬间的亮闪（贴在镜面高光位置） */
+.flash {
+  position: absolute;
+  inset: -2px;
+  z-index: 3;
+  border-radius: inherit;
+  background: radial-gradient(60% 80% at var(--hx) var(--hy),
+    hsl(0 0% 100% / .55) 0%, transparent 70%);
+  opacity: var(--glow);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+/* 按钮文字：蓄力时字距极轻微张开，配合整体呼吸 */
+.label {
+  position: relative;
+  z-index: 4;
+  font-size: clamp(17px, 3.8vw, 21px);
+  font-weight: 800;
+  letter-spacing: calc(.4em + var(--ch) * .08em);
+  text-indent: calc(.4em + var(--ch) * .08em);
+  color: hsl(0 0% 100% / .96);
+  text-shadow:
+    0 1px 0 hsl(0 0% 100% / .35),
+    0 1px 2px hsl(var(--h3) 80% 30% / .35),
+    0 3px 14px hsl(var(--h3) 80% 26% / .5);
+  transform: translateY(1px);
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- 释放特效层 */
+.fx {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.ripple {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  border: 2px solid hsl(var(--h1) 92% 70% / .65);
+  box-shadow: 0 0 18px hsl(var(--h1) 92% 72% / .28);
+  transform: translate(-50%, -50%) scale(.98);
+  animation: rippleOut var(--d, .8s) cubic-bezier(.16, .7, .3, 1) forwards;
+}
+@keyframes rippleOut {
+  0%   { transform: translate(-50%, -50%) scale(.98); opacity: .85; }
+  100% { transform: translate(-50%, -50%) scale(var(--rs, 1.6)); opacity: 0; }
+}
+
+.particle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--s, 7px);
+  height: var(--s, 7px);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%,
+    hsl(0 0% 100% / .95) 0%,
+    hsl(calc(var(--h1) + var(--pd, 0)) 92% 70% / .9) 55%,
+    transparent 74%);
+  box-shadow: 0 0 9px hsl(var(--h1) 92% 72% / .35);
+  animation: fly var(--d, .7s) cubic-bezier(.12, .62, .3, 1) forwards;
+}
+@keyframes fly {
+  0%   { transform: translate(-50%, -50%) scale(.5); opacity: 0; }
+  12%  { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  62%  { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.85); }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 22px)) scale(.12); opacity: 0; }
+}
+
+/* 表面晃动波纹：两道掠过的斜向亮带，600ms 内衰减消失 */
+.wave {
+  position: absolute;
+  top: -30%;
+  bottom: -30%;
+  left: -60%;
+  width: 55%;
+  z-index: 3;
+  background: linear-gradient(100deg,
+    transparent 0%,
+    hsl(0 0% 100% / .55) 50%,
+    transparent 100%);
+  pointer-events: none;
+  animation: waveSweep var(--wd, .5s) cubic-bezier(.2, .6, .3, 1) forwards;
+}
+@keyframes waveSweep {
+  0%   { transform: translateX(0) skewX(-12deg); opacity: 0; }
+  14%  { opacity: .6; }
+  100% { transform: translateX(430%) skewX(-12deg); opacity: 0; }
+}
+
+/* ---------------------------------------------------------------- 底部控件 */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.swatches {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.sw {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform .18s ease, box-shadow .18s ease;
+  box-shadow:
+    inset 0 1px 2px hsl(0 0% 100% / .85),
+    inset 0 -2px 4px hsl(0 0% 0% / .14),
+    0 2px 5px hsl(var(--h3) 40% 40% / .18);
+}
+.sw[data-theme="peach"] { background: radial-gradient(circle at 35% 30%, #ffdbe4, #ff8fb0 58%, #e35d8d); }
+.sw[data-theme="lime"]  { background: radial-gradient(circle at 35% 30%, #eaffc4, #b7e96b 58%, #78c33a); }
+.sw[data-theme="grape"] { background: radial-gradient(circle at 35% 30%, #efdaff, #b58cf0 58%, #8657d4); }
+.sw[aria-checked="true"] {
+  transform: scale(1.14);
+  box-shadow:
+    0 0 0 2px hsl(var(--h1) 45% 97%),
+    0 0 0 3.5px hsl(var(--h1) 58% 60% / .45),
+    inset 0 1px 2px hsl(0 0% 100% / .9),
+    0 3px 8px hsl(var(--h3) 40% 40% / .22);
+}
+
+.sound {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  color: hsl(var(--h1) 32% 40%);
+  background: hsl(0 0% 100% / .55);
+  box-shadow:
+    inset 0 0 0 1px hsl(0 0% 100% / .7),
+    0 4px 12px hsl(var(--h3) 30% 50% / .14);
+  backdrop-filter: blur(8px);
+  transition: background .2s ease, transform .12s ease;
+}
+.sound:active { transform: scale(.94); }
+.sound .slash { display: none; }
+.sound .waves { transition: opacity .2s ease; }
+.sound[aria-pressed="false"] .slash { display: block; }
+.sound[aria-pressed="false"] .waves { opacity: .12; }
+
+/* ---------------------------------------------------------------- 降级：减少动效 */
+@media (prefers-reduced-motion: reduce) {
+  .jelly {
+    transform: none !important;
+    filter: none !important;
+    transition: filter .18s ease, opacity .18s ease;
+  }
+  .jelly.rm-active { filter: brightness(.9) saturate(1.2) !important; }
+  .halo, .bloom, .ambient, .fx, .wave, .trace { display: none !important; }
+  .bubble { animation: none; }
+}
+</style>
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+
+<main class="stage">
+  <div class="readout" id="readout" data-live="false">
+    <span class="state" id="state" data-state="idle" role="status" aria-live="polite">idle</span>
+    <span class="held" id="held"></span>
+    <svg class="trace" id="trace" viewBox="0 0 96 26" aria-hidden="true">
+      <line x1="0" y1="13" x2="96" y2="13"></line>
+      <polyline id="traceLine" points=""></polyline>
+    </svg>
+  </div>
+
+  <div class="rig" id="rig">
+    <div class="halo" id="haloA" aria-hidden="true"></div>
+    <div class="halo" id="haloB" aria-hidden="true"></div>
+    <div class="bloom" id="bloom" aria-hidden="true"></div>
+    <div class="ambient" aria-hidden="true"></div>
+    <div class="fx" id="fx" aria-hidden="true"></div>
+
+    <button class="jelly" id="jelly" type="button" aria-label="果冻按钮：按住蓄力，松开回弹">
+      <span class="under" aria-hidden="true"></span>
+      <span class="bubble b1" aria-hidden="true"></span>
+      <span class="bubble b2" aria-hidden="true"></span>
+      <span class="bubble b3" aria-hidden="true"></span>
+      <span class="label">按 住</span>
+      <span class="flash" aria-hidden="true"></span>
+    </button>
+  </div>
+
+  <div class="controls">
+    <div class="swatches" role="radiogroup" aria-label="果冻颜色">
+      <button class="sw" type="button" role="radio" aria-checked="true"  aria-label="蜜桃" data-theme="peach"></button>
+      <button class="sw" type="button" role="radio" aria-checked="false" aria-label="青柠" data-theme="lime"></button>
+      <button class="sw" type="button" role="radio" aria-checked="false" aria-label="葡萄" data-theme="grape"></button>
+    </div>
+    <button class="sound" id="sound" type="button" aria-pressed="true" aria-label="音效">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+           stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 9.5v5h3.2L12 18V6L7.2 9.5H4z"/>
+        <path class="waves" d="M15.4 9.2a4 4 0 0 1 0 5.6M17.9 7a7.6 7.6 0 0 1 0 10"/>
+        <line class="slash" x1="4" y1="4" x2="20" y2="20"/>
+      </svg>
+    </button>
+  </div>
+</main>
+
+<script>
+"use strict";
+(() => {
+  /* ==========================================================================
+     1. 可调参数
+     --------------------------------------------------------------------------
+     弹簧单位：x 为归一化形变量（0 静止，负=压扁，正=拉长）；
+     k 为刚度（rad²/s²），c 为阻尼（1/s）。临界阻尼 ≈ 2√k。
+     ========================================================================== */
+  const CONFIG = {
+    maxDt: 1 / 30,          // 单帧最大步长，后台切回时防止积分爆炸
+
+    press: {
+      squash: 0.155,        // 按下时压扁到 sy = 1 - 0.155（sx 反向拉伸，近似体积守恒）
+      sink: 7,              // 下压位移（px）
+      k: 900, c: 42,        // 高刚度 + 近临界阻尼：下压干脆、不拖泥带水
+      entrySpeed: 1.6,      // 按下瞬间的向下初速，让动作更「砸实」
+    },
+
+    charge: {
+      fullMs: 1800,         // 按住多久蓄满
+      enterMs: 130,         // 按住超过该时长才进入 charging
+      extraSquash: 0.05,    // 蓄满时继续下沉的量
+      breathAmp: 0.013,     // 呼吸形变幅度（相对高度）
+      breathHz: 2.3,
+      jitterAmp: 0.004,     // 高频微抖幅度
+      jitterHz: 12,
+      haloPeriod: 1.7,      // 光环向外扩散一轮的秒数
+    },
+
+    release: {
+      k: 300,               // 回弹刚度：压低 → 出现明显过冲
+      c: 6.2,               // 基础阻尼：欠阻尼，振荡可见
+      cPerCharge: 2.8,      // 蓄力越久阻尼略增，但初速更大 → 振幅仍然更大
+      impulse: 3.4,         // 释放冲量（1/s），短按也有一次温柔的回弹
+      impulsePerCharge: 4.8,// 蓄力的加成：0.2s 与 2s 的体感差异主要来自这里
+      freqDrop: 0.34,       // 振荡过程中刚度额外衰减 → 频率略降
+      freqWindow: 0.75,     // 频率衰减完成所需的秒数
+      clamp: 0.36,          // 过冲上限，防止极端拉伸穿帮
+      restEps: 0.004,       // 位移低于此值
+      restVel: 0.05,        // 且速度低于此值 → 判定静止
+      pulseMs: 260,         // 释放亮度脉冲时长
+    },
+
+    lateral: {
+      k: 520, c: 20,        // 横向补偿弹簧：比纵向慢半拍，制造「果冻滞后」
+      ratio: 0.82,          // sx 反向拉伸比例
+    },
+
+    wobble: {
+      skew: 1.9,            // 剪切角峰值（度）
+      radius: 5.5,          // 圆角晃动峰值（px）
+      hz: 5.2,              // 余震频率
+      decay: 7.0,           // 指数衰减：约 600ms 内肉眼消失
+      minMs: 550,           // 至少保留这么久再判定静止
+    },
+
+    specular: {
+      rIdle: 46, rPress: 24,// 高光半径（%）：按压收缩
+      oIdle: 0.6, oPress: 0.96, // 高光亮度：按压变亮
+      followTau: 0.09,      // 跟随指针的时间常数（s）
+      sizeTau: 0.06,
+    },
+
+    ripple: {
+      particlesBase: 8, particlesPerCharge: 14,
+      ringsBase: 1, ringsCharged: 3,
+      spreadBase: 60, spreadPerCharge: 74,
+    },
+
+    audio: {
+      pressFreq: 240,       // 按下音（低而闷）
+      releaseBase: 320,     // 释放音基频
+      releasePerCharge: 280,// 蓄力越多，释放音越高
+      gain: 0.16,
+    },
+
+    trace: { n: 64 },
+  };
+
+  /* ==========================================================================
+     2. 取元素与基础工具
+     ========================================================================== */
+  const $ = (sel) => document.querySelector(sel);
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const TAU = Math.PI * 2;
+
+  const root = document.documentElement;
+  const rig = $("#rig");
+  const jelly = $("#jelly");
+  const fx = $("#fx");
+  const haloA = $("#haloA");
+  const haloB = $("#haloB");
+  const bloom = $("#bloom");
+  const stateEl = $("#state");
+  const heldEl = $("#held");
+  const readout = $("#readout");
+  const traceLine = $("#traceLine");
+  const soundBtn = $("#sound");
+
+  const reduceQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const REDUCED = () => reduceQuery.matches;
+
+  /* ==========================================================================
+     3. 状态机
+     --------------------------------------------------------------------------
+     idle → pressing → charging → releasing → settling → idle
+       pressing   指尖按下后的快速下压
+       charging   按住超过 enterMs，开始蓄力（呼吸 / 抖动 / 光环）
+       releasing  松手后的过冲主段
+       settling   过冲之后、能量耗尽的阻尼余震
+     ========================================================================== */
+  let state = "idle";
+  let active = false;          // 指针 / 键盘是否仍按住
+  let pointerId = null;
+  let keyHeld = false;
+  let downAt = 0;
+  let charge = 0;              // 当前蓄力 0..1
+  let releasedCharge = 0;      // 松手瞬间锁定的蓄力
+  let releasedHeldMs = 0;
+  let releaseAt = 0;
+  let peaked = false;          // 是否已经到达过冲顶点
+
+  // 两组弹簧：垂直主形变 y，横向补偿 s
+  const y = { x: 0, v: 0 };
+  const s = { x: 0, v: 0 };
+
+  // 镜面高光（位置 / 半径 / 亮度都做平滑）
+  const spec = { x: 50, y: 30, tx: 50, ty: 30, r: 46, o: 0.6 };
+
+  // 余震（独立于主弹簧的衰减振荡）
+  let wobT = Infinity;
+  let wobAmp = 0;
+  let glow = 0;
+
+  // 示波器缓冲
+  const traceBuf = new Float32Array(CONFIG.trace.n);
+  let traceHead = 0;
+
+  let rafId = 0;
+  let lastT = 0;
+
+  function setState(next) {
+    if (state === next) return;
+    state = next;
+    stateEl.textContent = next;
+    stateEl.dataset.state = next;
+    readout.dataset.live = String(next !== "idle");
+  }
+
+  /* ==========================================================================
+     4. 音效：Web Audio 合成短促「啵」声
+     --------------------------------------------------------------------------
+     按下：低频下滑 + 轻噪声「嗒」；释放：音高更高、更亮的「啵」。
+     音高、时长、湿润度都随蓄力增长，耳朵也能分辨按得久不久。
+     ========================================================================== */
+  let soundOn = true;
+  let audio = null;
+
+  function ensureAudio() {
+    if (!soundOn) return;
+    if (!audio) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      const ctx = new AC();
+      const master = ctx.createGain();
+      master.gain.value = 0.85;
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -16;
+      comp.knee.value = 12;
+      comp.ratio.value = 4;
+      master.connect(comp).connect(ctx.destination);
+      audio = { ctx, master };
+    }
+    if (audio.ctx.state === "suspended") audio.ctx.resume();
+  }
+
+  function noiseTick(t, freq, gain, dur) {
+    const { ctx, master } = audio;
+    const n = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = freq;
+    bp.Q.value = 1.1;
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    src.connect(bp).connect(g).connect(master);
+    src.start(t);
+  }
+
+  function pop(f0, f1, dur, gain, clickFreq, clickGain) {
+    if (!soundOn || !audio) return;
+    const { ctx, master } = audio;
+    const t = ctx.currentTime;
+
+    // 振幅包络：4ms 起音 + 指数衰减
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(gain, t + 0.006);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    env.connect(master);
+
+    // 主体：音高快速下滑，形成气泡破裂的「往下坠」感
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(f0, t);
+    osc.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.85);
+    osc.connect(env);
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+
+    // 湿润层：极短的带通噪声，给「啵」加一点气泡边缘的质感
+    if (clickGain > 0) noiseTick(t, clickFreq, clickGain, 0.022);
+  }
+
+  function playPress() {
+    ensureAudio();
+    if (!soundOn) return;
+    pop(CONFIG.audio.pressFreq * 1.35, CONFIG.audio.pressFreq * 0.55, 0.09, 0.1, 900, 0.05);
+  }
+
+  function playRelease(c) {
+    if (!soundOn) return;
+    ensureAudio();
+    const base = CONFIG.audio.releaseBase + c * CONFIG.audio.releasePerCharge;
+    pop(base * 1.5, base * 0.55, 0.13 + c * 0.06, CONFIG.audio.gain, base * 2.2, 0.07 + c * 0.05);
+  }
+
+  soundBtn.addEventListener("click", () => {
+    soundOn = !soundOn;
+    soundBtn.setAttribute("aria-pressed", String(soundOn));
+    soundBtn.setAttribute("aria-label", soundOn ? "音效开" : "音效关");
+    if (soundOn) {
+      ensureAudio();
+      pop(520, 640, 0.09, 0.1, 1600, 0.03); // 开启时给一个上扬的确认音
+    }
+  });
+
+  /* ==========================================================================
+     5. 弹簧积分器
+     --------------------------------------------------------------------------
+     半隐式欧拉 + 固定子步长（1/240s），保证高刚度下也稳定。
+     ========================================================================== */
+  function spring(o, target, k, c, dt) {
+    const steps = Math.min(16, Math.max(1, Math.ceil(dt / (1 / 240))));
+    const h = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      const a = -k * (o.x - target) - c * o.v;
+      o.v += a * h;
+      o.x += o.v * h;
+    }
+  }
+
+  /* ==========================================================================
+     6. 指针 / 键盘交互
+     ========================================================================== */
+  function specFromPoint(clientX, clientY) {
+    const r = jelly.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    spec.tx = clamp(((clientX - r.left) / r.width) * 100, -8, 108);
+    spec.ty = clamp(((clientY - r.top) / r.height) * 100, -10, 110);
+  }
+
+  function beginPress() {
+    if (active) return;
+    active = true;
+    downAt = performance.now();
+    charge = 0;
+    wobT = Infinity;
+    peaked = false;
+
+    // 清空示波器，开始记录这一次按压
+    traceBuf.fill(0);
+    traceHead = 0;
+
+    if (REDUCED()) {
+      jelly.classList.add("rm-active");
+      setState("pressing");
+      ensureAudio();
+      playPress();
+      wake();
+      return;
+    }
+
+    // 按下瞬间给一点向下初速，配合快弹簧形成「砸实」的手感
+    y.v -= CONFIG.press.entrySpeed;
+    setState("pressing");
+    playPress();
+    wake();
+  }
+
+  function endPress(cancelled) {
+    if (!active) return;
+    active = false;
+    pointerId = null;
+
+    const now = performance.now();
+    releasedCharge = charge;
+    releasedHeldMs = now - downAt;
+    releaseAt = now;
+    peaked = false;
+    heldEl.textContent = (releasedHeldMs / 1000).toFixed(2) + "s";
+
+    if (REDUCED()) {
+      jelly.classList.remove("rm-active");
+      setState("releasing");
+      if (!cancelled) playRelease(releasedCharge);
+      wake();
+      return;
+    }
+
+    // 阶段③：松开时注入向上冲量，蓄力越久冲得越猛
+    const R = CONFIG.release;
+    y.v = R.impulse + releasedCharge * R.impulsePerCharge;
+
+    // 余震启动：剪切 + 圆角晃动，幅度随蓄力放大
+    wobT = 0;
+    wobAmp = 0.5 + releasedCharge * 0.85;
+
+    setState("releasing");
+    if (!cancelled) {
+      playRelease(releasedCharge);
+      spawnRipple(releasedCharge);
+      spawnParticles(releasedCharge);
+      spawnWaves(releasedCharge);
+    }
+    wake();
+  }
+
+  jelly.addEventListener("pointerdown", (e) => {
+    if (!e.isPrimary) return;
+    e.preventDefault();
+    pointerId = e.pointerId;
+    try { jelly.setPointerCapture(e.pointerId); } catch (_) { /* 合成事件无指针 */ }
+    specFromPoint(e.clientX, e.clientY);
+    beginPress();
+  });
+
+  jelly.addEventListener("pointermove", (e) => {
+    specFromPoint(e.clientX, e.clientY);
+    wake(); // 空闲时也让高光平滑地追过去
+  });
+
+  jelly.addEventListener("pointerleave", () => {
+    if (active) return;                 // 按住时高光留在原地
+    spec.tx = 50;
+    spec.ty = 30;
+    wake();
+  });
+
+  jelly.addEventListener("pointerup", (e) => {
+    if (pointerId !== null && e.pointerId !== pointerId) return;
+    endPress(false);
+  });
+
+  jelly.addEventListener("pointercancel", (e) => {
+    if (pointerId !== null && e.pointerId !== pointerId) return;
+    endPress(true);
+  });
+
+  window.addEventListener("blur", () => endPress(true));
+
+  // 键盘可达性：空格 / 回车按住也能蓄力
+  jelly.addEventListener("keydown", (e) => {
+    if ((e.key === " " || e.key === "Enter") && !e.repeat) {
+      e.preventDefault();
+      keyHeld = true;
+      beginPress();
+    }
+  });
+  jelly.addEventListener("keyup", (e) => {
+    if ((e.key === " " || e.key === "Enter") && keyHeld) {
+      e.preventDefault();
+      keyHeld = false;
+      endPress(false);
+    }
+  });
+
+  /* ==========================================================================
+     7. 释放特效：涟漪环 + 糖粒 + 表面波纹
+     --------------------------------------------------------------------------
+     元素靠 CSS animation 播放，animationend 自清理，不占用 rAF 主循环。
+     ========================================================================== */
+  const autoRemove = (el) => el.addEventListener("animationend", () => el.remove(), { once: true });
+
+  function spawnRipple(c) {
+    const R = CONFIG.ripple;
+    const n = c > 0.55 ? R.ringsCharged : c > 0.18 ? 2 : R.ringsBase;
+    for (let i = 0; i < n; i++) {
+      const ring = document.createElement("i");
+      ring.className = "ripple";
+      ring.style.setProperty("--d", (640 + c * 320 + i * 110) + "ms");
+      ring.style.setProperty("--rs", (1.5 + c * 0.5 + i * 0.12).toFixed(2));
+      ring.style.animationDelay = (i * 90) + "ms";
+      fx.appendChild(ring);
+      autoRemove(ring);
+    }
+  }
+
+  function spawnParticles(c) {
+    const R = CONFIG.ripple;
+    const n = Math.round(R.particlesBase + c * R.particlesPerCharge);
+    for (let i = 0; i < n; i++) {
+      const p = document.createElement("i");
+      p.className = "particle";
+      const ang = (i / n) * TAU + Math.random() * 0.5;
+      const dist = R.spreadBase + c * R.spreadPerCharge + Math.random() * 30;
+      p.style.setProperty("--dx", (Math.cos(ang) * dist).toFixed(1) + "px");
+      p.style.setProperty("--dy", (Math.sin(ang) * dist * 0.55 - 16 - c * 22).toFixed(1) + "px");
+      p.style.setProperty("--s", (4 + Math.random() * 5).toFixed(1) + "px");
+      p.style.setProperty("--d", Math.round(540 + c * 260 + Math.random() * 160) + "ms");
+      p.style.setProperty("--pd", Math.round(Math.random() * 44 - 22));
+      p.style.animationDelay = Math.round(Math.random() * 40) + "ms";
+      fx.appendChild(p);
+      autoRemove(p);
+    }
+  }
+
+  function spawnWaves(c) {
+    for (let i = 0; i < 2; i++) {
+      const w = document.createElement("span");
+      w.className = "wave";
+      w.style.setProperty("--wd", Math.round(470 + c * 130) + "ms");
+      w.style.animationDelay = (i * 130) + "ms";
+      jelly.appendChild(w);
+      autoRemove(w);
+    }
+  }
+
+  /* ==========================================================================
+     8. 主循环：弹簧物理 + 派生视觉
+     ========================================================================== */
+  function wake() {
+    if (rafId) return;
+    lastT = performance.now();
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function tick(now) {
+    rafId = 0;
+    const dt = Math.min(CONFIG.maxDt, Math.max(0, (now - lastT) / 1000) || 1 / 60);
+    lastT = now;
+
+    if (REDUCED()) updateReduced(now);
+    else updateFull(now, dt);
+
+    if (active || state !== "idle") {
+      rafId = requestAnimationFrame(tick);
+    }
+  }
+
+  /* --- 减少动效：只保留按压的明暗变化 --- */
+  function updateReduced(now) {
+    if (active) {
+      charge = Math.min(1, (now - downAt) / CONFIG.charge.fullMs);
+      heldEl.textContent = ((now - downAt) / 1000).toFixed(2) + "s";
+      if (state === "pressing" && now - downAt > CONFIG.charge.enterMs) setState("charging");
+    } else if (state !== "idle" && now - releaseAt > 260) {
+      setState("idle");
+      charge = 0;
+      heldEl.textContent = "";
+    }
+  }
+
+  /* --- 完整动效 --- */
+  function updateFull(now, dt) {
+    const P = CONFIG.press;
+    const C = CONFIG.charge;
+    const R = CONFIG.release;
+    const holding = active;
+
+    /* 1. 状态推进：按住时长 → 蓄力进度 */
+    if (holding) {
+      const held = now - downAt;
+      charge = Math.min(1, held / C.fullMs);
+      heldEl.textContent = (held / 1000).toFixed(2) + "s";
+      if (state === "pressing" && held >= C.enterMs) setState("charging");
+    }
+
+    /* 2. 弹簧积分：按住 vs 释放使用不同的刚度/阻尼 */
+    if (holding) {
+      const depthTarget = -(P.squash + charge * C.extraSquash);
+      spring(y, depthTarget, P.k, P.c, dt);
+    } else if (state === "releasing" || state === "settling") {
+      const tRel = (now - releaseAt) / 1000;
+      // 刚度随时间小幅衰减：振荡频率略降，收尾更「软」
+      const freqFactor = 1 - R.freqDrop * Math.min(1, tRel / R.freqWindow);
+      spring(y, 0, R.k * freqFactor, R.c + releasedCharge * R.cPerCharge, dt);
+    }
+    // 过冲上限
+    if (y.x > R.clamp) { y.x = R.clamp; if (y.v > 0) y.v = 0; }
+
+    // 横向补偿：目标是主形变的反向缩放，但慢半拍 → 果冻的滞后感
+    spring(s, -y.x * CONFIG.lateral.ratio, CONFIG.lateral.k, CONFIG.lateral.c, dt);
+
+    /* 3. 状态迁移：过冲顶点之后进入 settling；能量耗尽回到 idle */
+    if ((state === "releasing" || state === "settling") && y.v < 0 && y.x > 0.03) {
+      peaked = true;
+    }
+    if (state === "releasing" && peaked) setState("settling");
+
+    if (state === "releasing" || state === "settling") {
+      const slow = Math.abs(y.x) < R.restEps && Math.abs(y.v) < R.restVel;
+      if (slow && wobT * 1000 > CONFIG.wobble.minMs) {
+        y.x = y.v = 0;
+        s.x = s.v = 0;
+        setState("idle");
+        charge = 0;
+        heldEl.textContent = "";
+        traceBuf.fill(0);
+      }
+    }
+
+    /* 4. 派生形变：呼吸 + 微抖叠加在主弹簧上 */
+    let sy = 1 + y.x;
+    let sx = 1 + s.x;
+    let breath = 0;
+
+    if (holding && state === "charging") {
+      const t = (now - downAt) / 1000;
+      breath = Math.sin(t * C.breathHz * TAU) * C.breathAmp * (0.35 + charge * 0.65);
+      const jitter = Math.sin(t * C.jitterHz * TAU + 0.6) * C.jitterAmp * charge;
+      sy += breath + jitter;
+      sx += -breath * 0.6 + jitter * 0.5;
+    }
+
+    /* 5. 余震：剪切角 + 圆角不对称晃动，指数衰减 */
+    let skew = 0;
+    let wobRadius = 0;
+    if (!holding && wobT < 1.2) {
+      wobT += dt;
+      const env = Math.exp(-CONFIG.wobble.decay * wobT);
+      const osc = Math.sin(wobT * CONFIG.wobble.hz * TAU);
+      skew = CONFIG.wobble.skew * wobAmp * env * osc;
+      wobRadius = CONFIG.wobble.radius * wobAmp * env * Math.sin(wobT * CONFIG.wobble.hz * TAU + 1.1);
+    }
+
+    /* 6. 亮度脉冲：松手瞬间体内亮一下 */
+    glow = 0;
+    if (state === "releasing" || state === "settling") {
+      glow = Math.max(0, 1 - (now - releaseAt) / R.pulseMs);
+    }
+
+    /* 7. 蓄力视觉：饱和度随 charge 上升，松开后 0.45s 内退干净 */
+    let chVis = 0;
+    if (holding) chVis = charge;
+    else if (state === "releasing" || state === "settling") {
+      chVis = releasedCharge * Math.max(0, 1 - (now - releaseAt) / 450);
+    }
+
+    /* 8. 高光：位置缓动跟随，尺寸/亮度随挤压收缩变亮 */
+    const follow = 1 - Math.exp(-dt / CONFIG.specular.followTau);
+    spec.x += (spec.tx - spec.x) * follow;
+    spec.y += (spec.ty - spec.y) * follow;
+
+    const depth = clamp(-y.x / (P.squash + C.extraSquash), 0, 1.12);
+    const sizeEase = 1 - Math.exp(-dt / CONFIG.specular.sizeTau);
+    const targetR = CONFIG.specular.rIdle + (CONFIG.specular.rPress - CONFIG.specular.rIdle) * depth + glow * 5;
+    const targetO = CONFIG.specular.oIdle + (CONFIG.specular.oPress - CONFIG.specular.oIdle) * depth + glow * 0.12;
+    spec.r += (targetR - spec.r) * sizeEase;
+    spec.o += (targetO - spec.o) * sizeEase;
+
+    /* 9. 蓄力光环：两枚错相位柔光椭圆向外扩散 */
+    const sink = Math.max(0, -y.x) * (P.sink / P.squash);
+    if (holding && charge > 0.001) {
+      const t = (now - downAt) / 1000;
+      const p1 = (t / C.haloPeriod) % 1;
+      applyHalo(haloA, p1, sx, sy, sink, charge);
+      applyHalo(haloB, (p1 + 0.5) % 1, sx, sy, sink, charge);
+      bloom.style.opacity = (charge * 0.55).toFixed(3);
+      bloom.style.transform = `translateY(${sink.toFixed(1)}px) scale(${(0.98 + breath * 2.2).toFixed(3)})`;
+    } else {
+      haloA.style.opacity = 0;
+      haloB.style.opacity = 0;
+      bloom.style.opacity = 0;
+    }
+
+    /* 10. 一次性写回所有 CSS 变量 */
+    const st = rig.style;
+    st.setProperty("--sx", sx.toFixed(4));
+    st.setProperty("--sy", sy.toFixed(4));
+    st.setProperty("--ty", sink.toFixed(2) + "px");
+    st.setProperty("--sk", skew.toFixed(3) + "deg");
+    st.setProperty("--k", depth.toFixed(3));
+    st.setProperty("--ch", chVis.toFixed(3));
+    st.setProperty("--hx", spec.x.toFixed(1) + "%");
+    st.setProperty("--hy", spec.y.toFixed(1) + "%");
+    st.setProperty("--sr", spec.r.toFixed(1) + "%");
+    st.setProperty("--so", spec.o.toFixed(3));
+    st.setProperty("--glow", glow.toFixed(3));
+    st.setProperty("--wobA", wobRadius.toFixed(2) + "px");
+
+    /* 11. 示波器：记录位移历史 */
+    traceBuf[traceHead] = y.x;
+    traceHead = (traceHead + 1) % traceBuf.length;
+    drawTrace();
+  }
+
+  function applyHalo(el, p, sx, sy, sink, charge) {
+    const grow = 0.94 + p * 0.5;
+    el.style.opacity = (charge * 0.62 * Math.pow(1 - p, 1.5)).toFixed(3);
+    el.style.transform =
+      `translateY(${sink.toFixed(1)}px) scale(${(sx * grow).toFixed(3)}, ${(sy * grow).toFixed(3)})`;
+  }
+
+  let tracePoints = "";
+  function drawTrace() {
+    const n = traceBuf.length;
+    let pts = "";
+    for (let i = 0; i < n; i++) {
+      const v = traceBuf[(traceHead + i) % n];
+      const px = (i / (n - 1)) * 96;
+      const py = 13 - v * 26;   // 静止在 13，向上为正
+      pts += (i ? " " : "") + px.toFixed(1) + "," + py.toFixed(1);
+    }
+    if (pts !== tracePoints) {
+      tracePoints = pts;
+      traceLine.setAttribute("points", pts);
+    }
+  }
+
+  /* ==========================================================================
+     9. 糖果色主题
+     ========================================================================== */
+  const THEMES = {
+    peach: { h1: 342, h2: 20, h3: 318 },
+    lime:  { h1: 94,  h2: 66, h3: 126 },
+    grape: { h1: 274, h2: 302, h3: 250 },
+  };
+
+  const swatches = Array.from(document.querySelectorAll(".sw"));
+  function setTheme(name) {
+    const t = THEMES[name];
+    if (!t) return;
+    root.style.setProperty("--h1", String(t.h1));
+    root.style.setProperty("--h2", String(t.h2));
+    root.style.setProperty("--h3", String(t.h3));
+    swatches.forEach((b) => b.setAttribute("aria-checked", String(b.dataset.theme === name)));
+  }
+  swatches.forEach((btn) => btn.addEventListener("click", () => setTheme(btn.dataset.theme)));
+
+  /* ==========================================================================
+     10. 动效偏好切换时复位
+     ========================================================================== */
+  reduceQuery.addEventListener?.("change", () => {
+    active = false;
+    pointerId = null;
+    keyHeld = false;
+    y.x = y.v = 0;
+    s.x = s.v = 0;
+    wobT = Infinity;
+    charge = 0;
+    jelly.classList.remove("rm-active");
+    setState("idle");
+    heldEl.textContent = "";
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = 0;
+  });
+})();
+</script>
+</body>
+</html>

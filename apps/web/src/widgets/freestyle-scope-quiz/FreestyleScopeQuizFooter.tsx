@@ -39,7 +39,7 @@ export function FreestyleScopeQuizFooter({
       </span>
       <div className="flex shrink-0 items-center gap-1.5">
         {currentState.resolved && index < questionCount - 1 && !navigationLocked ? (
-          <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">Enter 下一题</span>
+          <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">Enter / 空格 下一题</span>
         ) : null}
         {questionCount > 1 ? (
           <>

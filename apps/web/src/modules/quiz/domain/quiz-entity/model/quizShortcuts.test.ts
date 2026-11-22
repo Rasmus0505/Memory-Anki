@@ -126,6 +126,66 @@ describe('quizShortcuts', () => {
     )).toBeNull()
   })
 
+  it('pages forward on bare Space before and after the answer', () => {
+    expect(resolveQuizShortcutAction(
+      keydown(' ', 'Space'),
+      DEFAULT_QUIZ_SHORTCUTS,
+      context(),
+    )).toEqual({ id: 'next_question', run: true })
+    expect(resolveQuizShortcutAction(
+      keydown(' ', 'Space'),
+      DEFAULT_QUIZ_SHORTCUTS,
+      context({ answerRevealed: true, choiceShortcutsActive: false, attemptClosed: true }),
+    )).toEqual({ id: 'next_question', run: true })
+    expect(resolveQuizShortcutAction(
+      keydown(' ', 'Space', { repeat: true }),
+      DEFAULT_QUIZ_SHORTCUTS,
+      context({ repeat: true }),
+    )).toEqual({ id: 'next_question', run: false })
+  })
+
+  it('keeps Space for typing, focused controls, and the last question', () => {
+    expect(resolveQuizShortcutAction(
+      keydown(' ', 'Space'),
+      DEFAULT_QUIZ_SHORTCUTS,
+      context({ editable: true }),
+    )).toBeNull()
+    // Shift+Space is still a space character.
+    expect(resolveQuizShortcutAction(
+      keydown(' ', 'Space', { shiftKey: true }),
+      DEFAULT_QUIZ_SHORTCUTS,
+      context(),
+    )).toBeNull()
+    expect(resolveQuizShortcutAction(
+      keydown(' ', 'Space'),
+      DEFAULT_QUIZ_SHORTCUTS,
+      context({ spaceOnUnrelatedControl: true, answerRevealed: true }),
+    )).toBeNull()
+    expect(resolveQuizShortcutAction(
+      keydown(' ', 'Space'),
+      DEFAULT_QUIZ_SHORTCUTS,
+      context({ hasNextQuestion: false }),
+    )).toBeNull()
+    expect(resolveQuizShortcutAction(
+      keydown(' ', 'Space'),
+      DEFAULT_QUIZ_SHORTCUTS,
+      context({ questionCount: 1 }),
+    )).toBeNull()
+  })
+
+  it('lets a focused option keep Space until the answer is visible', () => {
+    expect(resolveQuizShortcutAction(
+      keydown(' ', 'Space'),
+      DEFAULT_QUIZ_SHORTCUTS,
+      context({ spaceOnOption: true }),
+    )).toBeNull()
+    expect(resolveQuizShortcutAction(
+      keydown(' ', 'Space'),
+      DEFAULT_QUIZ_SHORTCUTS,
+      context({ spaceOnOption: true, answerRevealed: true }),
+    )).toEqual({ id: 'next_question', run: true })
+  })
+
   it('drops a second action that reuses ArrowUp', () => {
     const sanitized = sanitizeQuizShortcutMap({
       ...DEFAULT_QUIZ_SHORTCUTS,

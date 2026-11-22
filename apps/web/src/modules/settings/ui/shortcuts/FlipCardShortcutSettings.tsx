@@ -88,7 +88,7 @@ export function FlipCardShortcutSettings({ className }: FlipCardShortcutSettings
         return
       }
       if (RESERVED_KEY_CODES.has(captured.value.code)) {
-        setCaptureError('PageUp / PageDown / ← / → 保留给随心页翻页，空格保留给卡片内输入，W / A / S / D 保留给移动视图，请换一个按键。')
+        setCaptureError('PageUp / PageDown / ← / → / 空格保留给随心页翻页，W / A / S / D 保留给移动视图，请换一个按键。')
         return
       }
       const signature = getShortcutSignature(captured.value)
@@ -187,7 +187,7 @@ export function FlipCardShortcutSettings({ className }: FlipCardShortcutSettings
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
-          固定键：PageUp / PageDown 翻页，← / → 也可翻页；空格不再翻页，留给卡片内输入；W / A / S / D 移动脑图视图（长按连续平移）。
+          固定键：PageUp / PageDown 翻页，← / → 和空格也可翻页；焦点在按钮上时空格用于激活按钮；W / A / S / D 移动脑图视图（长按连续平移）。
         </p>
         <Button
           type="button"

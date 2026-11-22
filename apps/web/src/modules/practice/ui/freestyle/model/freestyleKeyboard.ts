@@ -17,15 +17,33 @@ export function isFreestyleShortcutBlocked(target: EventTarget | null) {
 }
 
 /**
- * Vertical feed paging. PageUp/PageDown only: Space is deliberately unbound —
- * a card can be in inline edit, and a space bar that pages the feed while the
- * caret sits in a card was turning cards away from under the learner.
- * Callers must still skip this while a quiz dialog or a card editor owns keys.
+ * Vertical feed paging. PageUp/PageDown only; Space is resolved through the
+ * shared flip page map (`resolveFlipCardPageDirection`) so its modifier checks
+ * stay in one place. Callers must still skip paging while a quiz dialog or a
+ * card editor owns keys.
  */
 export function getFreestyleFeedPageDirection(key: string): FreestyleQuestionDirection | null {
   if (key === 'PageDown') return 'next'
   if (key === 'PageUp') return 'previous'
   return null
+}
+
+const SPACE_OWNER_SELECTOR = 'button, a, [role="button"], [role="menuitem"], summary'
+
+/**
+ * A focused control keeps Space: it is that control's activation key. Paging on
+ * Space must not fire from a toolbar/rating/pager button or a link, exactly as
+ * the quiz window keeps Space on its own controls. Text fields and an open card
+ * editor are blocked earlier by `isFreestyleShortcutBlocked`.
+ */
+export function isFreestyleControlOwnedSpace(
+  event: Pick<KeyboardEvent, 'key' | 'code'>,
+  target: EventTarget | null,
+) {
+  const isSpace = event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar'
+  if (!isSpace) return false
+  if (!(target instanceof Element)) return false
+  return Boolean(target.closest(SPACE_OWNER_SELECTOR))
 }
 
 /**
