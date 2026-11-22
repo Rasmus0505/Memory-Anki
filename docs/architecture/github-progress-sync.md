@@ -39,6 +39,6 @@
 
 ## 运维
 
-- 双击 `tools/cross-device-sync/同步学习数据.bat`：1 上传、2 下载、3 状态。
+- 双击项目根目录的 `同步学习数据.bat`：1 上传、2 下载、3 状态（脚本本体在 `tools/cross-device-sync/`）。
 - 脚本：`tools/cross-device-sync/github-sync.ps1`，支持 `status|init|push|pull|menu`；依赖 `gh` 登录，不依赖 git 远端。
 - 测试：`apps/api/tests/test_full_transfer_service.py` 覆盖「进度包不含附件」「导入不删附件」「整库导入拒绝进度包」。

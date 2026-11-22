@@ -9,7 +9,7 @@
 
 ## 日常操作
 
-双击 `同步学习数据.bat`：
+双击项目根目录的 `同步学习数据.bat`：
 
 | 选择 | 作用 |
 |---|---|
@@ -46,8 +46,8 @@ snapshot.json       来源设备、时间、校验和、关键表行数
 ## 文件
 
 ```
-github-sync.ps1          同步脚本（status / init / push / pull / menu）
-同步学习数据.bat          双击入口
+tools/cross-device-sync/github-sync.ps1   同步脚本（status / init / push / pull / menu）
+同步学习数据.bat                          项目根目录的双击入口
 ```
 
 同步目录默认 `C:\MemoryAnki\github-sync`，里面有：
