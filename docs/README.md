@@ -57,6 +57,7 @@
 | [superpowers/specs/](superpowers/specs/) | 早期设计稿 | 历史（已实现或已被取代） | 2026-11-04 |
 | [architecture/](architecture/README.md) | 架构门禁资产与守卫文档 | 现行 | 2026-11-09 |
 | [architecture/color-literal-ratchet.md](architecture/color-literal-ratchet.md) | 颜色字面量数量门禁与覆盖边界 | 现行 | 2026-11-09 |
+| [architecture/github-progress-sync.md](architecture/github-progress-sync.md) | 学习进度经私有数据仓库快照跨设备同步 | 现行 | 2026-11-22 |
 | `resume-assets/`、`resume-*.pdf` | 个人简历材料 | 非产品文档 | — |
 
 ## 架构文档

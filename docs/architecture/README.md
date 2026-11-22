@@ -5,6 +5,8 @@
 
 本文件是当前架构地图。产品与运行时上下文位于 `AI_PROJECT_CONTEXT.md`；`local_app_home` 下的运行时文件使用三个根目录：`学习数据`、`学科附件`、`日志缓存`（详细路径由 `memory_anki.core.config` 派生）。
 
+跨设备学习进度通过私有数据仓库的单份快照同步，不进入公开代码仓库；资源、口径与护栏见 [GitHub 学习进度同步](github-progress-sync.md)。
+
 ## 系统形态
 
 ```text
@@ -14,7 +16,7 @@ apps/api: presentation -> application/use cases -> domain + ports <- infrastruct
 
 前端运行时模块（`apps/web/src/modules/*`）：`backup content dashboard exam english english-lookup memory mindmap practice produce quiz search session settings`。旧版 `features/` 与 `entities/` 层已完全迁移进 `modules/*`（实体包位于 `modules/<name>/domain/*-entity` 下）。层级方向由 ESLint（`eslint-plugin-boundaries` 配合 TypeScript resolver）强制；模块 `public.ts` 纪律由 `tools/check_architecture.py` 强制。
 
-本仓库是供两台设备使用的本地优先 Windows 产品。SQLite、文件、备份、PWA 与桌面客户端共用同一个本地后端。跨设备行为必须是确定性的，因为运行时数据在 Git 之外同步。
+本仓库是供两台设备使用的本地优先 Windows 产品。SQLite、文件、备份、PWA 与桌面客户端共用同一个本地后端。跨设备行为必须是确定性的：运行数据不进入代码仓库，学习进度以整库快照经私有数据仓库传递（见 [github-progress-sync.md](github-progress-sync.md)），且一次只允许一台设备写入。
 
 ## 归属
 

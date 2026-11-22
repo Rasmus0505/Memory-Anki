@@ -78,6 +78,60 @@ def test_import_full_archive_replaces_tables_and_attachments(db_session, transfe
     assert not (transfer_env / "stale.txt").exists()
 
 
+def test_build_progress_archive_excludes_attachments(db_session, transfer_env):
+    _create_alembic_revision(db_session)
+    db_session.add(Palace(title="Alpha"))
+    (transfer_env / "image.txt").write_text("attachment", encoding="utf-8")
+    db_session.commit()
+
+    archive_bytes, filename = full_transfer_service.build_progress_archive(db_session)
+
+    assert filename.startswith("memory-anki-progress-")
+    with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+        assert not any(name.startswith("attachments/") for name in archive.namelist())
+    assert manifest["contents"] == ["database"]
+    preview = full_transfer_service.inspect_archive(archive_bytes, db_session)
+    assert preview["contents"] == ["database"]
+    assert preview["attachment_count"] == 0
+
+
+def test_import_progress_archive_keeps_receiver_attachments(db_session, transfer_env):
+    _create_alembic_revision(db_session)
+    db_session.add(Palace(title="Source"))
+    db_session.commit()
+    archive_bytes, _ = full_transfer_service.build_progress_archive(db_session)
+
+    bind = db_session.get_bind()
+    db_session.close()
+    dirty_session = db_session.__class__(bind=bind)
+    dirty_session.query(Palace).delete()
+    dirty_session.add(Palace(title="Old"))
+    (transfer_env / "keep.txt").write_text("local", encoding="utf-8")
+    dirty_session.commit()
+
+    result = full_transfer_service.import_progress_archive(archive_bytes, dirty_session)
+
+    assert result["table_counts"]["palaces"] == 1
+    assert result["restored_attachments"] == 0
+    replacement_session = db_session.__class__(bind=bind)
+    try:
+        assert replacement_session.query(Palace).one().title == "Source"
+    finally:
+        replacement_session.close()
+    assert (transfer_env / "keep.txt").read_text(encoding="utf-8") == "local"
+
+
+def test_import_full_archive_rejects_progress_only_archive(db_session, transfer_env):
+    _create_alembic_revision(db_session)
+    archive_bytes, _ = full_transfer_service.build_progress_archive(db_session)
+    (transfer_env / "keep.txt").write_text("local", encoding="utf-8")
+
+    with pytest.raises(full_transfer_service.FullTransferError, match="只含学习进度"):
+        full_transfer_service.import_full_archive(archive_bytes, db_session)
+    assert (transfer_env / "keep.txt").read_text(encoding="utf-8") == "local"
+
+
 def test_import_full_archive_ignores_attachment_path_traversal(db_session, transfer_env, tmp_path):
     _create_alembic_revision(db_session)
     archive_bytes, _ = full_transfer_service.build_full_archive(db_session)

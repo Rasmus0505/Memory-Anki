@@ -6,8 +6,10 @@ from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.backups.api import (
     FullTransferError,
     build_full_archive,
+    build_progress_archive,
     create_rescue_snapshot,
     import_full_archive,
+    import_progress_archive,
     inspect_archive,
 )
 from memory_anki.modules.content.api import (
@@ -45,6 +47,43 @@ def api_export_full(s: Session = Depends(session_dep)):
         media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@router.get("/export/progress")
+def api_export_progress(s: Session = Depends(session_dep)):
+    """Database-only archive for cross-device study progress sync."""
+    zip_bytes, filename = build_progress_archive(s)
+    return Response(
+        zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.post("/import/progress/preview")
+async def api_import_progress_preview(
+    file: UploadFile = File(...),
+    s: Session = Depends(session_dep),
+):
+    try:
+        return {"ok": True, **inspect_archive(await file.read(), s)}
+    except FullTransferError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/import/progress")
+async def api_import_progress(
+    file: UploadFile = File(...),
+    s: Session = Depends(session_dep),
+):
+    zip_bytes = await file.read()
+    try:
+        inspect_archive(zip_bytes, s)
+        create_rescue_snapshot("before-progress-import")
+        result = import_progress_archive(zip_bytes, s)
+        return {"ok": True, **result}
+    except FullTransferError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/import/full/preview")

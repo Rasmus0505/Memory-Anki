@@ -52,9 +52,34 @@ def _dump_all_tables(session: Session) -> dict[str, list[dict[str, Any]]]:
 
 
 def build_full_archive(session: Session) -> tuple[bytes, str]:
-    """Return a DB + attachments archive.
+    """Return a DB + attachments archive."""
+    return _build_archive(
+        session,
+        include_attachments=True,
+        filename=f"memory-anki-full-{date.today().strftime('%Y%m%d')}.zip",
+    )
 
+
+def build_progress_archive(session: Session) -> tuple[bytes, str]:
+    """Return a database-only archive for cross-device study progress sync.
+
+    Attachments (PDF library, subject files) are deliberately excluded: they are
+    large and rarely change, and an import of this archive must never touch the
+    files already on the receiving device.
     """
+    return _build_archive(
+        session,
+        include_attachments=False,
+        filename=f"memory-anki-progress-{date.today().strftime('%Y%m%d')}.zip",
+    )
+
+
+def _build_archive(
+    session: Session,
+    *,
+    include_attachments: bool,
+    filename: str,
+) -> tuple[bytes, str]:
     data = _dump_all_tables(session)
     revision = _current_alembic_revision(session)
     manifest = {
@@ -62,18 +87,21 @@ def build_full_archive(session: Session) -> tuple[bytes, str]:
         "alembic_revision": revision,
         "created_at": utc_now_naive().isoformat(timespec="seconds"),
         "table_counts": {name: len(rows) for name, rows in data.items()},
-        "contents": ["database", "attachments"],
+        "contents": ["database"] + (["attachments"] if include_attachments else []),
     }
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(MANIFEST_JSON_NAME, json.dumps(manifest, ensure_ascii=False, indent=2))
         archive.writestr(DATA_JSON_NAME, json.dumps(data, ensure_ascii=False, default=_json_default))
-        root = Path(ATTACHMENTS_DIR)
-        if root.exists():
-            for file_path in root.rglob("*"):
-                if file_path.is_file():
-                    archive.write(file_path, ATTACHMENTS_PREFIX + file_path.relative_to(root).as_posix())
-    filename = f"memory-anki-full-{date.today().strftime('%Y%m%d')}.zip"
+        if include_attachments:
+            root = Path(ATTACHMENTS_DIR)
+            if root.exists():
+                for file_path in root.rglob("*"):
+                    if file_path.is_file():
+                        archive.write(
+                            file_path,
+                            ATTACHMENTS_PREFIX + file_path.relative_to(root).as_posix(),
+                        )
     return buffer.getvalue(), filename
 
 
@@ -97,9 +125,14 @@ def inspect_archive(zip_bytes: bytes, session: Session) -> dict[str, Any]:
             for name in names
             if name.startswith(ATTACHMENTS_PREFIX) and not name.endswith("/")
         )
+        contents = manifest.get("contents")
+        if not isinstance(contents, list) or not contents:
+            # Format version 1 archives always carried attachments.
+            contents = ["database", "attachments"]
         return {
             "manifest": manifest,
             "attachment_count": attachment_count,
+            "contents": [str(item) for item in contents],
             "schema_match": bool(current_revision) and archive_revision == current_revision,
             "current_alembic_revision": current_revision,
         }
@@ -107,17 +140,38 @@ def inspect_archive(zip_bytes: bytes, session: Session) -> dict[str, Any]:
 
 def import_full_archive(zip_bytes: bytes, session: Session) -> dict[str, Any]:
     """Replace all managed tables and attachments with archive contents."""
+    return _import_archive(zip_bytes, session, restore_attachments=True)
+
+
+def import_progress_archive(zip_bytes: bytes, session: Session) -> dict[str, Any]:
+    """Replace all managed tables, leaving the receiver's attachments untouched."""
+    return _import_archive(zip_bytes, session, restore_attachments=False)
+
+
+def _import_archive(
+    zip_bytes: bytes,
+    session: Session,
+    *,
+    restore_attachments: bool,
+) -> dict[str, Any]:
     preview = inspect_archive(zip_bytes, session)
     if not preview["schema_match"]:
         raise FullTransferError(
             "导出包的数据库版本与当前程序不一致，请先把两台设备升级到同一版本再迁移。"
         )
+    if restore_attachments and "attachments" not in preview["contents"]:
+        raise FullTransferError("这个压缩包只含学习进度，请用学习进度导入，而不是整库导入。")
 
     bind = session.get_bind() or engine
     session.close()
 
     with _open_archive(zip_bytes) as archive:
         data = _read_data_json(archive)
+        if not restore_attachments:
+            return {
+                "table_counts": _replace_tables(bind, data),
+                "restored_attachments": 0,
+            }
         # Files are staged before the database transaction and originals remain
         # available until the DB commit has succeeded.
         # Entries outside attachments/ (e.g. the retired time-ledger/ folder of
