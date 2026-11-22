@@ -17,7 +17,6 @@ import { FreestyleScopeQuizHeaderActions } from './FreestyleScopeQuizHeaderActio
 import { OverlayQuizScopeLeftNotice } from './OverlayQuizScopeList'
 import { QuizQuestionRoundRatingBadge } from '@/widgets/quiz-round-rating'
 import { useOverlayProgressPersistence } from './useOverlayProgressPersistence'
-import { useOverlayQuizShuffle } from './useOverlayQuizShuffle'
 import { useOverlayQuizClear } from './useOverlayQuizClear'
 import { useOverlayRatingRefresh } from './useOverlayRatingRefresh'
 import { getPalaceQuizQuestionsByIdsApi } from '@/modules/quiz/domain/quiz-entity/api'
@@ -371,7 +370,6 @@ export function FreestyleScopeQuizDialog(props: FreestyleScopeQuizDialogProps) {
   const {
     persistProgress: persistRoundProgress,
     prioritizeNow,
-    flushProgressNow,
   } = useOverlayProgressPersistence({
     prioritizeWrongRef,
     roundIdRef,
@@ -391,20 +389,6 @@ export function FreestyleScopeQuizDialog(props: FreestyleScopeQuizDialogProps) {
     },
     [isDirect, persistRoundProgress],
   )
-
-  // 打乱题库 is a round write: flush pending answers first so the server keeps
-  // exactly the questions the learner has already answered in place.
-  const hasOpenQuestion = questions.some(
-    (question) => !questionStates[question.id]?.resolved,
-  )
-  const { shuffling, shuffle: shuffleQuestions } = useOverlayQuizShuffle({
-    roundId,
-    planVersionRef,
-    adoptRound,
-    loadQuestions,
-    flushProgressNow,
-    hasOpenQuestions: hasOpenQuestion,
-  })
 
   const current = questions[index] ?? null
   const currentId = current?.id ?? null
@@ -694,7 +678,7 @@ export function FreestyleScopeQuizDialog(props: FreestyleScopeQuizDialogProps) {
       goToIndex(nextIndex)
       if (isDirect) direct.setIndex(nextIndex)
     },
-    // Visible option buttons own selection, feedback and immediate shuffling.
+    // Visible option buttons own selection and feedback.
     onSelectOption: noop,
     onToggleMark: () => {
       if (!current) return
@@ -782,9 +766,6 @@ export function FreestyleScopeQuizDialog(props: FreestyleScopeQuizDialogProps) {
                   copyingOutline={copyingOutline}
                   onCopyOutline={(palaceId) => void copyOutline(palaceId)}
                   onOpenPalace={() => setPalaceLookupOpen(true)}
-                  canShuffle={!loading && questions.length > 1}
-                  shuffling={isDirect ? false : shuffling}
-                  onShuffle={isDirect ? direct.handleShuffleQuestions : () => void shuffleQuestions()}
                   actionsDisabled={editingQuestion || showConfig}
                   onOpenClearProgress={() => setClearProgressOpen(true)}
                   roundActionsAvailable={!isDirect}

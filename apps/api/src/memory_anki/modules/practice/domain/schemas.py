@@ -106,13 +106,6 @@ class FreestyleOverlayQuizProgressRequest(BaseModel):
     auto_prioritize_wrong_palaces: bool = False
 
 
-class FreestyleOverlayQuizShuffleRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    operation_id: str
-    expected_version: int
-
-
 class FreestyleOverlayQuizDropPalacesRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -3,7 +3,6 @@ import type { PalaceQuizQuestion, PalaceQuizQuestionDraft } from '@/shared/api/c
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
-import { useQuizOptionShuffle } from './useQuizOptionShuffle'
 import { cn } from '@/shared/lib/utils'
 import {
   canSwitchQuizAnswerMode,
@@ -101,15 +100,10 @@ export function QuizQuestionInteraction({
   const previousDurationMs =
     'last_answer_duration_ms' in question ? question.last_answer_duration_ms : null
   const { mode, updateMode } = useQuizAnswerMode()
-  const { order: optionOrder, displayedOptions, shuffleNow } = useQuizOptionShuffle({
-    questionId,
-    questionType: question.question_type,
-    options: question.options || [],
-  })
+  const displayedOptions = question.options || []
   const handleShortAnswerSubmit = useCallback(() => {
     onShortAnswerSubmit?.()
-    if (question.question_type === 'multiple_choice') shuffleNow()
-  }, [onShortAnswerSubmit, question.question_type, shuffleNow])
+  }, [onShortAnswerSubmit])
   const showDuration = useCallback(
     (anchor: Element | null, options?: AnswerDurationBubbleOptions) => {
       if (questionId == null) return
@@ -156,7 +150,6 @@ export function QuizQuestionInteraction({
           onStateChange={onStateChange}
           onShortAnswerSubmit={handleShortAnswerSubmit}
           onSubmitted={showDuration}
-          optionOrder={optionOrder.currentOrder}
         />
       )
     }
@@ -184,7 +177,6 @@ export function QuizQuestionInteraction({
           selectedIds.every((item) => correctOptionIds.includes(item))
         onStateChange((current) => ({ ...current, resolved: true, correct }))
         onChoiceResolve?.(selectedIds, correct)
-        shuffleNow()
         return correct
       }
       return (
@@ -211,7 +203,7 @@ export function QuizQuestionInteraction({
                   !choiceAnswered && !selected && 'border-border/70 bg-background/80 hover:border-primary/40 hover:bg-primary/5',
                 )}
               >
-                <span className="mr-1 inline-block w-[1.25rem] shrink-0 whitespace-pre font-medium">{optionOrder.shuffled ? '  ' : `${option.id}. `}</span>
+                <span className="mr-1 inline-block w-[1.25rem] shrink-0 whitespace-pre font-medium">{`${option.id}. `}</span>
                 {option.text}
                 {selected && !choiceAnswered ? <span className="ml-2 text-xs text-primary">已选</span> : null}
               </button>
@@ -240,7 +232,7 @@ export function QuizQuestionInteraction({
             >
               <div className="text-sm font-medium">{currentState.correct ? '回答正确' : '回答错误'}</div>
               <div className={cn('text-sm text-muted-foreground', compact ? 'mt-1.5' : 'mt-2')}>
-                正确答案：{optionOrder.shuffled ? (question.options || []).filter((option) => correctOptionIds.includes(option.id)).map((option) => option.text).join('、') : correctOptionIds.join('')}
+                正确答案：{correctOptionIds.join('')}
               </div>
               <div className={cn('text-sm', compact ? 'mt-2' : 'mt-3')}>
                 解析：{question.analysis || '暂无解析'}
@@ -274,7 +266,6 @@ export function QuizQuestionInteraction({
                   correct,
                 }))
                 onChoiceResolve?.(option.id, correct)
-                shuffleNow()
                 showDuration(event.currentTarget, answerFeedback(correct, 'left-top'))
               }}
               className={cn(
@@ -286,7 +277,7 @@ export function QuizQuestionInteraction({
                 !choiceAnswered && 'border-border/70 bg-background/80 hover:border-primary/40 hover:bg-primary/5',
               )}
             >
-              <span className="mr-1 inline-block w-[1.25rem] shrink-0 whitespace-pre font-medium">{optionOrder.shuffled ? '  ' : `${option.id}. `}</span>
+              <span className="mr-1 inline-block w-[1.25rem] shrink-0 whitespace-pre font-medium">{`${option.id}. `}</span>
               {option.text}
             </button>
           )
@@ -302,7 +293,7 @@ export function QuizQuestionInteraction({
               {currentState.correct ? '回答正确' : '回答错误'}
             </div>
             <div className={cn('text-sm text-muted-foreground', compact ? 'mt-1.5' : 'mt-2')}>
-              正确答案：{optionOrder.shuffled ? (question.options || []).find((option) => option.id === correctOptionId)?.text || '暂无' : correctOptionId || '暂无'}
+              正确答案：{correctOptionId || '暂无'}
             </div>
             <div className={cn('text-sm', compact ? 'mt-2' : 'mt-3')}>
               解析：{question.analysis || '暂无解析'}

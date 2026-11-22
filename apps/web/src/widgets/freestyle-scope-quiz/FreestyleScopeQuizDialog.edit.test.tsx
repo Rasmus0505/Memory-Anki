@@ -15,7 +15,6 @@ vi.mock('@/modules/practice/public', () => ({
 vi.mock('@/modules/practice/ui/freestyle/api', () => ({
   ensureFreestyleOverlayQuizApi: vi.fn(),
   progressFreestyleOverlayQuizApi: vi.fn(),
-  shuffleFreestyleOverlayQuizApi: vi.fn(),
 }))
 
 vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({

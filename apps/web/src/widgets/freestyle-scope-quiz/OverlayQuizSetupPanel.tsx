@@ -18,8 +18,7 @@ import type {
   FreestyleQuizScope,
   FreestyleRoundStatePayload,
 } from '@/shared/api/contracts'
-import { QuizShortcutSettingsSection, useQuizOptionShuffleSettings } from '@/modules/quiz/public'
-import { Switch } from '@/shared/components/ui/switch'
+import { QuizShortcutSettingsSection } from '@/modules/quiz/public'
 import { Button } from '@/shared/components/ui/button'
 import { cn } from '@/shared/lib/utils'
 
@@ -136,7 +135,6 @@ export function OverlayQuizSetupPanel({
   )
   const [kindCounts, setKindCounts] = useState({ objective: 0, subjective: 0 })
   const [countsReady, setCountsReady] = useState(false)
-  const { settings: optionShuffleSettings, updateSettings: updateOptionShuffleSettings } = useQuizOptionShuffleSettings()
   const configRef = useRef(storedConfig)
   const planVersionRef = useRef(planVersion)
   configRef.current = storedConfig
@@ -362,17 +360,6 @@ export function OverlayQuizSetupPanel({
           <QuizShortcutSettingsSection />
         </div>
       </details>
-
-      <Section title="选项顺序">
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/80 px-3.5 py-3">
-          <p className="text-sm font-semibold">自动打乱选项</p>
-          <Switch
-            checked={optionShuffleSettings.enabled}
-            aria-label="自动打乱选项"
-            onCheckedChange={(enabled) => updateOptionShuffleSettings({ ...optionShuffleSettings, enabled })}
-          />
-        </div>
-      </Section>
 
       <div className="sticky bottom-0 z-10 border-t border-border/50 bg-background/95 py-3 backdrop-blur">
         <SetupSaveButton

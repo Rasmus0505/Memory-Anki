@@ -1,4 +1,4 @@
-import { ArrowUpToLine, BookOpen, LoaderCircle, MoreHorizontal, RotateCcw, Shuffle } from 'lucide-react'
+import { ArrowUpToLine, BookOpen, MoreHorizontal, RotateCcw } from 'lucide-react'
 import type { QuizRuntimeState } from '@/modules/quiz/public'
 import { QuizCopyQuestionsMenu } from '@/widgets/quiz-wrong-export/QuizCopyQuestionsMenu'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
@@ -28,9 +28,6 @@ export function FreestyleScopeQuizHeaderActions({
   copyingOutline,
   onCopyOutline,
   onOpenPalace,
-  canShuffle,
-  shuffling,
-  onShuffle,
   onOpenClearProgress,
   prioritizeWrong,
   onPrioritizeWrongChange,
@@ -50,10 +47,6 @@ export function FreestyleScopeQuizHeaderActions({
   copyingOutline: boolean
   onCopyOutline: (palaceId: number) => void
   onOpenPalace: () => void
-  /** Only a multi-question pool has an order to shuffle. */
-  canShuffle: boolean
-  shuffling: boolean
-  onShuffle: () => void
   onOpenClearProgress: () => void
   /** Round-only: a direct question set has no 随心 round to reorder. */
   prioritizeWrong?: boolean
@@ -101,18 +94,6 @@ export function FreestyleScopeQuizHeaderActions({
           type="button"
           size="sm"
           variant="outline"
-          aria-label="打乱题库"
-          title="只打乱还没答的题，已答的题留在原位"
-          disabled={shuffling || !canShuffle || actionsDisabled}
-          onClick={onShuffle}
-        >
-          {shuffling ? <LoaderCircle className="size-4 animate-spin" /> : <Shuffle className="size-4" />}
-          <span>打乱题库</span>
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
           aria-label="清除进度"
           title="清除当前宫殿或全部宫殿的已答记录"
           disabled={actionsDisabled}
@@ -151,9 +132,6 @@ export function FreestyleScopeQuizHeaderActions({
               onSelect={() => { if (copyPalaceId != null) onCopyOutline(copyPalaceId) }}
             >
               复制导图
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={shuffling || !canShuffle || actionsDisabled} onSelect={onShuffle}>
-              打乱题库
             </DropdownMenuItem>
             <DropdownMenuItem variant="destructive" disabled={actionsDisabled} onSelect={onOpenClearProgress}>
               清除进度

@@ -512,3 +512,4 @@ AI 相关功能分布较广：
 - 2026-10-03：撤回随心模式 juiciness 前端（果冻翻卡舞台 `JellyMindmapStage`、`parentCharge`、配套动效/粒子改造）。`apps/web` 回到 `44ce4bb9`。不要把果冻舞台当作当前架构补回。
 - 2026-11-03：整宫标记（根节点永久标记生成 `unit_kind=palace` 单元）；做题错题快照与单元红/绿；选项打乱、打乱题库、`Ctrl+Z` 重新作答；反馈中心精简为试听 + 音色池 + 全局音量；复习单元收藏只完成后端字段/接口/投影，前端星标尚未接入。
 - 2026-11-04：文档清理——删除 40 份旧架构说明与旧交付物，只保留 `tools/check_architecture.py` 直接消费的 10 份门禁资产；新增 `docs/README.md` 文档索引与用户视角介绍；复习排期文档核对（±5% 抖动后真实上限约 383 天、睡前卡惰性清理、整宫单元、考试冲刺落在考前 1–8 天）。
+- 2026-11-22：移除题库顺序与选项乱序——「打乱题库」按钮、`overlay-quiz/shuffle` 接口、`shuffle_nonce`、`quizShuffleOrder` / `quiz_shuffle_orders`、`quizOptionShuffle` / `quiz_option_shuffle` 与对应门禁和测试全部删除；随心的跨宫殿随机抽题与单元随机顺序保留。

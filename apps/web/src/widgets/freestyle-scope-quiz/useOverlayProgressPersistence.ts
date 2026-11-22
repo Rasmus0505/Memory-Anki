@@ -210,8 +210,8 @@ export function useOverlayProgressPersistence({
 
   writeProgressNowRef.current = writeProgressNow
 
-  /** Resolves once a pending write has landed, so callers that need the server
-   * up to date (打乱题库) do not race their own debounce. */
+  /** Resolves once a pending write has landed, so pagehide/visibility flushes
+   * do not race their own debounce. */
   const flushProgressNow = useCallback(async () => {
     if (persistTimerRef.current != null) {
       window.clearTimeout(persistTimerRef.current)
@@ -283,6 +283,5 @@ export function useOverlayProgressPersistence({
   return {
     persistProgress,
     prioritizeNow,
-    flushProgressNow,
   }
 }

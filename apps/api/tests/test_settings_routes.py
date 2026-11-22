@@ -155,19 +155,6 @@ class TestClientPreferences:
             "quiz_font_scale"
         ] == {"percent": 130}
 
-    def test_quiz_option_shuffle_roundtrip(self, client):
-        # 选项打乱只在作答后立即换序，旧的 thresholdSeconds 已移除。
-        value = {"enabled": False}
-        response = client.put(
-            "/api/v1/profile/client-preferences", json={"quiz_option_shuffle": value}
-        )
-
-        assert response.status_code == 200
-        assert response.json()["items"]["quiz_option_shuffle"] == value
-        assert client.get("/api/v1/profile/client-preferences").json()["items"][
-            "quiz_option_shuffle"
-        ] == value
-
     def test_quiz_shortcuts_roundtrip(self, client):
         response = client.put(
             "/api/v1/profile/client-preferences",

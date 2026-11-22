@@ -2424,59 +2424,6 @@ def test_quiz_font_scale_primitive_must_live_in_quiz_entity(
     assert any("quiz font-scale primitive is required" in item for item in errors)
 
 
-def test_quiz_shuffle_order_must_be_a_shared_preference(
-    tmp_path: Path, monkeypatch
-) -> None:
-    web_src = tmp_path / "apps" / "web" / "src"
-    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
-    # Browser storage alone is exactly the bug: the order reset on the other
-    # surface. The gate must reject a localStorage-only model.
-    write_file(
-        web_src
-        / "modules"
-        / "quiz"
-        / "domain"
-        / "quiz-entity"
-        / "model"
-        / "quizShuffleOrder.ts",
-        "const STORAGE_KEY = 'memory-anki.quiz.shuffle-order.v1'\n"
-        "export function saveQuizShuffleOrder() { localStorage.setItem(STORAGE_KEY, '[]') }\n",
-    )
-
-    errors: list[str] = []
-    check_architecture.check_quiz_shuffle_order_persistence(errors)
-
-    assert any("quiz_shuffle_orders" in item for item in errors)
-    assert any("quizShuffleSetStorageKey" in item for item in errors)
-    assert any("client preferences must persist quiz_shuffle_orders" in item for item in errors)
-
-
-def test_quiz_shuffle_order_check_passes_on_the_repository() -> None:
-    errors: list[str] = []
-
-    check_architecture.check_quiz_shuffle_order_persistence(errors)
-
-    assert errors == []
-
-
-def test_quiz_option_shuffle_forbids_persisted_display_order(tmp_path: Path, monkeypatch) -> None:
-    web_src = tmp_path / "apps" / "web" / "src"
-    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
-    root = web_src / "modules" / "quiz" / "domain" / "quiz-entity"
-    write_file(root / "model" / "quizRuntime.ts", "choiceOptionOrder?: string[]")
-    write_file(root / "ui" / "QuizQuestionInteraction.tsx", "useQuizOptionShuffle")
-    write_file(tmp_path / "docs" / "architecture" / "quiz-frontend-boundary.md", "<!-- invariant: quiz-shared-option-shuffle -->")
-    errors: list[str] = []
-    check_architecture.check_quiz_option_shuffle_boundary(errors)
-    assert any("must not enter quiz progress" in error for error in errors)
-    write_file(root / "model" / "quizRuntime.ts", "selectedOptionId?: string")
-    errors.clear()
-    check_architecture.check_quiz_option_shuffle_boundary(errors)
-    assert errors == []
-
-
 def test_quiz_answer_dialogs_require_shared_surface(tmp_path: Path, monkeypatch) -> None:
     web_src = tmp_path / "apps" / "web" / "src"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
@@ -5367,7 +5314,7 @@ def test_card_editor_owns_keys_rejects_missing_marker_duplicate_reader_and_space
     assert any("data-mindmap-editor-active" in item and "NodeCard" in item for item in errors)
     assert any("isKeyboardShortcutSuspended" in item for item in errors)
     assert any("feedPager.ts" in item for item in errors)
-    assert any("Space is a typed character" in item for item in errors)
+    assert any("must keep the open-card-editor guard" in item for item in errors)
 
 
 def test_card_editor_owns_keys_accepts_marker_and_shared_suspension(
@@ -5385,6 +5332,7 @@ def test_card_editor_owns_keys_accepts_marker_and_shared_suspension(
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyleKeyboard.ts",
+        "import { isKeyboardShortcutSuspended } from '@/shared/keyboard/keyboardTargets'\n"
         "export function page(key: string) { return key === 'PageDown' ? 'next' : null }\n",
     )
 

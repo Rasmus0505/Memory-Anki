@@ -3,12 +3,7 @@ import {
   getPalaceQuizQuestionsApi,
   getPalaceQuizQuestionsByIdsApi,
 } from '@/modules/quiz/domain/quiz-entity/api'
-import {
-  applyQuizShuffleOrder,
-  readQuizShuffleOrder,
-  saveQuizShuffleOrder,
-  type QuizRuntimeState,
-} from '@/modules/quiz/public'
+import { type QuizRuntimeState } from '@/modules/quiz/public'
 import { sortPalaceQuizQuestions } from '@/modules/quiz/ui/palace-quiz/model/questionBankOrder'
 import { firstIncompleteQuestionIndex } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
 import {
@@ -18,7 +13,6 @@ import {
   removeQuizSessionQuestions,
   writeQuizSessionState,
 } from '@/modules/quiz/public'
-import { shuffleQuizQuestionsForPractice } from '@/modules/quiz/public'
 import type { QuizProgressClearChoice } from '@/widgets/quiz-progress-clear/QuizProgressClearDialog'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
 import { toast } from '@/shared/feedback/toast'
@@ -28,8 +22,7 @@ import { toast } from '@/shared/feedback/toast'
  *
  * The 随心 toolbar opens the window on a round. A node badge, a mind-map review
  * card, or a 随心 unit card knows only a list of question ids, so this hook loads
- * that list and owns the session progress, shuffle order, and local clear/import
- * actions. Presentation stays in `FreestyleScopeQuizDialog`, so there is one
+ * that list and owns the session progress and local clear/import actions. Presentation stays in `FreestyleScopeQuizDialog`, so there is one
  * quiz window to change.
  */
 export function useDirectQuestionSetQuiz({
@@ -137,17 +130,11 @@ export function useDirectQuestionSetQuiz({
           for (const item of palaceQuestions.items || []) byId.set(item.id, item)
         }
         for (const item of questionOutcome.items) byId.set(item.id, item)
-        const natural = sortPalaceQuizQuestions(
+        const ordered = sortPalaceQuizQuestions(
           activeIds
             .map((id) => byId.get(id))
             .filter((item): item is PalaceQuizQuestion => Boolean(item))
             .filter((item) => !removedQuestionIdsRef.current.has(item.id)),
-        )
-        const ordered = applyQuizShuffleOrder(
-          natural,
-          // 打乱题库 is a shared preference (palace+node, then the same question
-          // set from another entry point), so reopening never reshuffles it.
-          readQuizShuffleOrder({ palaceId, nodeUid: nodeUid ?? null }, natural.map((item) => item.id)),
         )
         questionsRef.current = ordered
         setQuestions(ordered)
@@ -233,38 +220,6 @@ export function useDirectQuestionSetQuiz({
     [onQuestionStateChange, onQuestionStateChangeRef],
   )
 
-  /**
-   * 打乱题库: shuffle only the questions still open, keep answered slots, and
-   * remember the order so reopening the window does not undo it.
-   */
-  const handleShuffleQuestions = useCallback(() => {
-    const loaded = questionsRef.current
-    if (loaded.length < 2) {
-      toast.info('这个窗口只有一道题，没有可打乱的顺序。')
-      return
-    }
-    const answered = new Set(
-      loaded
-        .filter((question) => questionStatesRef.current[question.id]?.resolved)
-        .map((question) => question.id),
-    )
-    const openCount = loaded.length - answered.size
-    if (openCount === 1) {
-      toast.info('只剩一道还没答的题，打乱后顺序不会变。')
-      return
-    }
-    const next = shuffleQuizQuestionsForPractice(loaded, answered)
-    questionsRef.current = next
-    setQuestions(next)
-    saveQuizShuffleOrder({ palaceId, nodeUid: nodeUid ?? null }, next.map((question) => question.id))
-    setIndex(firstIncompleteQuestionIndex(next.map((question) => question.id), answered))
-    toast.success(
-      answered.size >= next.length
-        ? '题目都答过了，已整份打乱，从第 1 题开始。'
-        : '已打乱题库，从第一道还没答的题开始。',
-    )
-  }, [nodeUid, palaceId])
-
   const handleClearChoice = useCallback((choice: QuizProgressClearChoice) => {
     const loaded = questionsRef.current
     if (choice.scope === 'palace') {
@@ -322,7 +277,6 @@ export function useDirectQuestionSetQuiz({
     removedQuestionIdsRef,
     updateLocalState,
     resetLocalAnswer,
-    handleShuffleQuestions,
     handleClearChoice,
     handleImportedQuestions,
   }

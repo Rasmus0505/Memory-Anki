@@ -3553,6 +3553,9 @@ def check_card_editor_owns_keys(errors: list[str]) -> None:
     target editable?" is not enough: Space / Enter / arrows would flip, rate or
     page the card underneath. NodeCard marks the open editor, the shared keyboard
     module reads it, and no other module may re-implement that read.
+
+    Space is also a fixed 下一张 key in the feed, which makes this guard the only
+    thing keeping Space a typed character while a card editor is open.
     """
     node_card = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "NodeCard.tsx"
     marked = node_card.exists() and (
@@ -3595,10 +3598,11 @@ def check_card_editor_owns_keys(errors: list[str]) -> None:
     )
     if paging.exists():
         paging_source = paging.read_text(encoding="utf-8", errors="ignore")
-        if "key === ' '" in paging_source or "code === 'Space'" in paging_source:
+        if "isKeyboardShortcutSuspended" not in paging_source:
             errors.append(
-                f"{paging.relative_to(WEB_SRC).as_posix()}: Space is a typed character, never a "
-                "feed page key; PageUp/PageDown and ← / → page the feed."
+                f"{paging.relative_to(WEB_SRC).as_posix()}: Space pages the feed, so the paging "
+                "module must keep the open-card-editor guard "
+                "(isKeyboardShortcutSuspended / isFreestyleShortcutBlocked)."
             )
 
 
@@ -4883,20 +4887,6 @@ def check_palace_memory_lookup_binding_center(errors: list[str]) -> None:
             )
 
 
-def check_quiz_option_shuffle_boundary(errors: list[str]) -> None:
-    """Option display order must not leak into persisted answer state."""
-    root = WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity"
-    runtime = root / "model" / "quizRuntime.ts"
-    interaction = root / "ui" / "QuizQuestionInteraction.tsx"
-    boundary = REPO_ROOT / "docs" / "architecture" / "quiz-frontend-boundary.md"
-    if runtime.exists() and re.search(r"choiceOption(?:OriginalOrder|Order|sShuffled)", runtime.read_text(encoding="utf-8")):
-        errors.append(f"{runtime.relative_to(REPO_ROOT).as_posix()}: option display order must not enter quiz progress.")
-    if not interaction.exists() or "useQuizOptionShuffle" not in interaction.read_text(encoding="utf-8"):
-        errors.append("Shared quiz interaction must own option shuffle.")
-    if not boundary.exists() or not has_invariant(boundary.read_text(encoding="utf-8"), "quiz-shared-option-shuffle"):
-        errors.append("Quiz frontend boundary must document option shuffle.")
-
-
 def check_quiz_answer_mode_primitive(errors: list[str]) -> None:
     """Choice/subjective recall rewriting belongs to the quiz entity."""
     model = (
@@ -5120,76 +5110,6 @@ def check_quiz_font_scale_primitive(errors: list[str]) -> None:
                 f"{host.relative_to(REPO_ROOT).as_posix()}: "
                 "must not own a separate wheel zoom listener."
             )
-
-
-def check_quiz_shuffle_order_persistence(errors: list[str]) -> None:
-    """「打乱题库」order must be a shared preference, not browser-local state.
-
-    The dialog is rebuilt from the opener's ids on every open, so the order has to
-    be stored somewhere durable. Keeping it in localStorage alone made one shuffle
-    look fresh again on the other surface (desktop window / PWA run on different
-    origins) or the other device, so it must travel as a client preference and
-    fall back to the question set when another entry point opens the same cards.
-    """
-    model = (
-        WEB_SRC
-        / "modules"
-        / "quiz"
-        / "domain"
-        / "quiz-entity"
-        / "model"
-        / "quizShuffleOrder.ts"
-    )
-    boundary = REPO_ROOT / "docs" / "architecture" / "quiz-frontend-boundary.md"
-    router = (
-        REPO_ROOT
-        / "apps"
-        / "api"
-        / "src"
-        / "memory_anki"
-        / "modules"
-        / "settings"
-        / "presentation"
-        / "router.py"
-    )
-    contract = WEB_SRC / "shared" / "api" / "contracts" / "profile.ts"
-
-    if not model.exists():
-        errors.append(
-            f"{model.relative_to(REPO_ROOT).as_posix()}: quiz shuffle-order model is required."
-        )
-    else:
-        model_source = model.read_text(encoding="utf-8", errors="ignore")
-        for token in ("quiz_shuffle_orders", "saveClientPreference"):
-            if token not in model_source:
-                errors.append(
-                    f"{model.relative_to(REPO_ROOT).as_posix()}: "
-                    f"must persist the shuffle order through `{token}`."
-                )
-        if "quizShuffleSetStorageKey" not in model_source:
-            errors.append(
-                f"{model.relative_to(REPO_ROOT).as_posix()}: "
-                "must also expose `quizShuffleSetStorageKey`, so another entry point "
-                "for the same cards reuses the order."
-            )
-    router_source = router.read_text(encoding="utf-8", errors="ignore") if router.exists() else ""
-    if '"quiz_shuffle_orders"' not in router_source:
-        errors.append(
-            f"{router.relative_to(REPO_ROOT).as_posix()}: "
-            "client preferences must persist quiz_shuffle_orders."
-        )
-    contract_source = contract.read_text(encoding="utf-8", errors="ignore") if contract.exists() else ""
-    if "quiz_shuffle_orders" not in contract_source:
-        errors.append(
-            f"{contract.relative_to(REPO_ROOT).as_posix()}: "
-            "client preference contract must include quiz_shuffle_orders."
-        )
-    boundary_text = boundary.read_text(encoding="utf-8", errors="ignore") if boundary.exists() else ""
-    if not has_invariant(boundary_text, "quiz-shared-shuffle-order"):
-        errors.append(
-            f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
-            "must document the shared 打乱题库 order."
-        )
 
 
 def check_quiz_inline_edit(errors: list[str]) -> None:
@@ -7511,9 +7431,7 @@ def main() -> int:
     check_palace_quiz_application_facades(errors)
     check_palace_memory_lookup_binding_center(errors)
     check_quiz_answer_mode_primitive(errors)
-    check_quiz_option_shuffle_boundary(errors)
     check_quiz_font_scale_primitive(errors)
-    check_quiz_shuffle_order_persistence(errors)
     check_window_layout_memory(errors)
     check_quiz_shortcut_primitive(errors)
     check_flip_card_shortcut_settings(errors)

@@ -39,7 +39,6 @@ from memory_anki.modules.practice.application.round_overlay_service import (
     read_active_overlay_wrong_questions,
     read_round_question_badge,
     set_overlay_skipped_palaces,
-    shuffle_overlay_quiz,
 )
 from memory_anki.modules.practice.application.round_state_service import (
     apply_round_action,
@@ -55,7 +54,6 @@ from memory_anki.modules.practice.domain.schemas import (
     FreestyleOverlayQuizDropPalacesRequest,
     FreestyleOverlayQuizEnsureRequest,
     FreestyleOverlayQuizProgressRequest,
-    FreestyleOverlayQuizShuffleRequest,
     FreestyleOverlayQuizSkipPalacesRequest,
     FreestyleQuestionAttemptCreate,
     FreestyleQuestionExplanationCreate,
@@ -255,23 +253,6 @@ def api_freestyle_overlay_quiz_progress(
             states=data.states,
             wrong_question_ids=data.wrong_question_ids,
             auto_prioritize_wrong_palaces=data.auto_prioritize_wrong_palaces,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.post("/freestyle/rounds/{round_id}/overlay-quiz/shuffle")
-def api_freestyle_overlay_quiz_shuffle(
-    round_id: str,
-    data: FreestyleOverlayQuizShuffleRequest,
-    session: Session = Depends(session_dep),
-):
-    try:
-        return shuffle_overlay_quiz(
-            session,
-            round_id=round_id,
-            operation_id=data.operation_id,
-            expected_version=data.expected_version,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

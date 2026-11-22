@@ -80,12 +80,10 @@ CLIENT_PREFERENCE_GROUPS = {
     "flip_card_reveal_config",
     "quiz_answer_mode",
     "quiz_font_scale",
-    "quiz_option_shuffle",
     "quiz_shortcuts",
     "window_layouts",
     "growth_state",
     "english_cloze_marks",
-    "quiz_shuffle_orders",
 }
 
 CLIENT_PREFERENCE_KEY_PREFIX = "client_preferences."

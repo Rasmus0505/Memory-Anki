@@ -68,12 +68,12 @@ describe('FreestyleScopeQuizDialog direct question set', () => {
     expect(screen.queryByRole('button', { name: '做题快捷键' })).toBeNull()
     expect(screen.getByRole('button', { name: '查看宫殿' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '复制题目' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '打乱题库' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '打乱题库' })).toBeNull()
     expect(screen.getByRole('button', { name: '清除进度' })).toBeTruthy()
     expect(getPalaceQuizQuestionsByIdsApiMock).toHaveBeenCalledWith([101])
   })
 
-  it('opens shared shortcut and option-shuffle settings from 做题配置', async () => {
+  it('opens shared shortcut settings from 做题配置', async () => {
     renderDirect()
     await screen.findByText('角标打开的关联题目')
 
@@ -81,7 +81,7 @@ describe('FreestyleScopeQuizDialog direct question set', () => {
 
     expect(screen.getByText('当前卡片关联的 1 道题')).toBeTruthy()
     expect(screen.getAllByText('快捷键')).toHaveLength(2)
-    expect(screen.getByRole('switch', { name: '自动打乱选项' })).toBeTruthy()
+    expect(screen.queryByRole('switch', { name: '自动打乱选项' })).toBeNull()
     expect(screen.getByRole('button', { name: '录制下一题' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '完成配置' })).toBeTruthy()
   })
@@ -129,10 +129,4 @@ describe('FreestyleScopeQuizDialog direct question set', () => {
     expect(screen.getByText('已答 1')).toBeTruthy()
   })
 
-  it('disables 打乱题库 for a single question', async () => {
-    renderDirect()
-    await screen.findByText('角标打开的关联题目')
-
-    expect(screen.getByRole('button', { name: '打乱题库' }).hasAttribute('disabled')).toBe(true)
-  })
 })

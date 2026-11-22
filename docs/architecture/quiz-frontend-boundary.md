@@ -18,19 +18,13 @@ modules/practice/ui/review -> modules/quiz/public.ts
 <!-- invariant: quiz-subjective-stem-rewrite -->
 <!-- invariant: quiz-converted-analysis-first-line -->
 
-做题窗口（`widgets/freestyle-scope-quiz`）通过 `QuizQuestionIndexPager` 对顶部题号轨道分页。一页是一行实测宽度：胶囊尺寸保持固定（`size-7`），由 `quizIndexPageCapacity` 决定能容纳多少；未测量时的回退值是 20。行标签为 `第 {page}/{pages} 页 · 已完成 {done}/{count} 题`（进度按全卷已答数统计，不是当前题号；没有起止范围）。当该分页器可见时，宿主会把“已答”和宫殿上下文保留在对话框描述中，且不得在那里重复进度计数器。宿主不得内联渲染完整的圆形按钮网格。轨道固定在滚动作答主体之外（`pinned`、`data-quiz-index-rail`），并忽略子胶囊宽度抖动，因此揭示答案不会重新打乱可见题号。叠加层面板使用 `QUIZ_ANSWERING_DIALOG_CLASS`，使浮动窗口保持稳定高度，答案在内部滚动，而不是让面板重新居中。
+做题窗口（`widgets/freestyle-scope-quiz`）通过 `QuizQuestionIndexPager` 对顶部题号轨道分页。一页是一行实测宽度：胶囊尺寸保持固定（`size-7`），由 `quizIndexPageCapacity` 决定能容纳多少；未测量时的回退值是 20。行标签为 `第 {page}/{pages} 页 · 已完成 {done}/{count} 题`（进度按全卷已答数统计，不是当前题号；没有起止范围）。当该分页器可见时，宿主会把“已答”和宫殿上下文保留在对话框描述中，且不得在那里重复进度计数器。宿主不得内联渲染完整的圆形按钮网格。轨道固定在滚动作答主体之外（`pinned`、`data-quiz-index-rail`），并忽略子胶囊宽度抖动，因此揭示答案不会改变可见题号。叠加层面板使用 `QUIZ_ANSWERING_DIALOG_CLASS`，使浮动窗口保持稳定高度，答案在内部滚动，而不是让面板重新居中。
 <!-- invariant: quiz-index-pager-ownership -->
 
-直接题目集模式（角标 / 脑图复习 / 随心单元卡）的「打乱题库」顺序位于 `quizShuffleOrder` 中，并作为 `quiz_shuffle_orders` 客户端偏好持久化，而不仅仅存在浏览器存储中。该窗口每次打开都会根据打开者的 id 重建，因此顺序必须在其中存活；以 `palace:node` 为键（题目集作为第二键，localStorage 仅在偏好加载前作为镜像）正是避免一次打乱在另一个界面或另一台设备上又显得全新的关键。打开窗口从不打乱；只有按钮会，而且它只在未作答题目各自的槽位之间移动这些题目。
-<!-- invariant: quiz-shared-shuffle-order -->
-
-选择题选项的显示顺序也归 Quiz 实体的共享作答交互所有：`QuizQuestionInteraction` 继续用 option id 判分和提交，只在当前交互实例的临时展示状态中保存当前显示顺序和是否已打乱，不写入答题进度。界面不再提供手动“打乱选项 / 恢复选项”按钮；打乱只由 `quiz_option_shuffle` 客户端偏好控制，入口是做题窗口“配置 → 选项顺序 → 自动打乱选项”开关，默认开启。开关开启时，每次选择题作答完成后立即重排当前选项：单选点击作答后、多选提交后，以及选择题主观呈现提交后；不以正误或耗时为条件。多选仅在提交时重排，选择期间保持原序。重排只改变展示顺序，不改变刚提交的选择 id、判分、反馈或解析；主观呈现的选项回顾也跟随本次新顺序。打乱后题号前缀的位置保留固定宽度，选项文本不得因为前缀消失而横向跳动。偏好跨做题场景和设备共享。选项重排不得修改题目 payload、正确答案或选择 id 集合。
-<!-- invariant: quiz-shared-option-shuffle -->
-
-做题窗口的右上角操作条拥有固定数量的槽位：一个控件在当前题或当前状态下不适用时保持可见但禁用，不得从 DOM 中移除。`打乱题库` 在题池不足两题时禁用。原因是一次增删控件会把整行挤成两行、把题目正文整体下推，观感上像整个窗口重排了一次。
+做题窗口的右上角操作条拥有固定数量的槽位：一个控件在当前题或当前状态下不适用时保持可见但禁用，不得从 DOM 中移除。原因是一次增删控件会把整行挤成两行、把题目正文整体下推，观感上像整个窗口重排了一次。
 <!-- invariant: quiz-stable-action-bar -->
 
-做题快捷键位于 Quiz 实体中：`quizShortcuts`、`QuizShortcutSettingsSection` 和 `useQuizAnsweringShortcuts`，作为 `quiz_shortcuts` 客户端偏好持久化。随心轮次与直接题目集共用同一个做题窗口外观、配置入口和快捷键区域；直接题目集只固定题目来源，不提供轮次范围设置。两种模式共享同一张映射。标记默认是 ArrowUp，每次按键切换一次；按键重复不得再次切换。题目导航、选项移动、数字与字母选择以及 Enter 提交保持可配置。数字按物理键位匹配：小键盘数字与顶部数字行是同一个键（`Numpad1` 等同 `Digit1`，NumLock 关闭时也按数字处理），小键盘回车等同主回车；录制小键盘按键会存成同一条绑定；字母键只认主键盘。ArrowUp 不同时作为上一选项的默认键。任一对话框打开时，ArrowUp 和 ArrowDown 不得翻动其下的随心信息流。宿主不得为这些操作保留第二个 keydown 监听器。删除默认是 Backspace，列在同一设置区域中，并打开现有的删除确认；它不会从已启用的文本字段中触发。答案揭示后，提交绑定在还有下一题时前进；按住时不重复。确认对话框（`ConfirmDialog`、`appConfirm`）接受 Enter 以确认。当 `[data-confirm-dialog="open"]` 对话框打开时，测验快捷键让路，以免 Enter 被抢走。
+做题快捷键位于 Quiz 实体中：`quizShortcuts`、`QuizShortcutSettingsSection` 和 `useQuizAnsweringShortcuts`，作为 `quiz_shortcuts` 客户端偏好持久化。随心轮次与直接题目集共用同一个做题窗口外观、配置入口和快捷键区域；直接题目集只固定题目来源，不提供轮次范围设置。两种模式共享同一张映射。标记默认是 ArrowUp，每次按键切换一次；按键重复不得再次切换。题目导航、选项移动、数字与字母选择以及 Enter 提交保持可配置。数字按物理键位匹配：小键盘数字与顶部数字行是同一个键（`Numpad1` 等同 `Digit1`，NumLock 关闭时也按数字处理），小键盘回车等同主回车；录制小键盘按键会存成同一条绑定；字母键只认主键盘。ArrowUp 不同时作为上一选项的默认键。任一对话框打开时，ArrowUp 和 ArrowDown 不得翻动其下的随心信息流。宿主不得为这些操作保留第二个 keydown 监听器。删除默认是 Backspace，列在同一设置区域中，并打开现有的删除确认；它不会从已启用的文本字段中触发。空格是固定的下一题键（无修饰键），答案未揭示时也会切题：焦点在选项上且答案未揭示时仍交给选项选择，焦点在非选项控件（关闭、设置等）上时仍交给该控件激活；输入框、快捷键录制和确认窗口优先。答案揭示后，提交绑定在还有下一题时前进；按住时不重复。确认对话框（`ConfirmDialog`、`appConfirm`）接受 Enter 以确认。当 `[data-confirm-dialog="open"]` 对话框打开时，测验快捷键让路，以免 Enter 被抢走。
 <!-- invariant: quiz-shortcut-arrowup-marks -->
 
 `QuizQuestionAnswerSurface` 统一题干、字号与答题交互的呈现；入口仍各自拥有题目范围、轮次身份和保存。`Ctrl+Z` 默认清除当前题的作答与草稿，不清累计统计；输入框、快捷键录制和确认窗口优先处理自己的按键。重答后旧 AI 点评请求不能重新写回已清除的状态。
