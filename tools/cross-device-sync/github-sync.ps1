@@ -40,8 +40,6 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
-try { $OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
 function Resolve-AppHome {
     $configPath = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'local-config\memory-anki.local.json'
@@ -246,7 +244,9 @@ function Show-Status {
 }
 
 function Invoke-Push {
+    Write-Host '正在检查本机服务…'
     Assert-Api
+    Write-Host '正在连接 GitHub…'
     Ensure-Repo
     Ensure-Release
 
@@ -260,7 +260,7 @@ function Invoke-Push {
         $message = "另一台设备在 $(Format-Epoch $remoteEpoch) 上传了更新的进度（$($remoteMeta.device)）。先下载，或确认用本机覆盖它。"
         if (-not $Force) {
             Write-Host "注意：$message"
-            $answer = Read-Host '确认覆盖远端？输入 y'
+            $answer = Read-Host '确认覆盖远端？输入 y 后按回车'
             if ($answer -ne 'y') { throw '已取消。先运行 pull。' }
         }
     }
@@ -328,7 +328,9 @@ function Invoke-Push {
 }
 
 function Invoke-Pull {
+    Write-Host '正在检查本机服务…'
     Assert-Api
+    Write-Host '正在连接 GitHub…'
     Ensure-Repo
 
     $meta = Get-RemoteMeta
@@ -371,10 +373,10 @@ function Invoke-Pull {
         if ($state -and $state.last_sync_epoch) { $lastSync = [long]$state.last_sync_epoch }
         if ($localWrite -and $lastSync -and $localWrite -gt $lastSync) {
             Write-Host "注意：本机在 $(Format-Epoch $lastSync) 之后还有学习记录，下载会用远端快照整份替换它们。"
-            $answer = Read-Host '确认放弃本机这部分记录？输入 y'
+            $answer = Read-Host '确认放弃本机这部分记录？输入 y 后按回车'
             if ($answer -ne 'y') { throw '已取消。可以先上传本机进度，再到另一台下载。' }
         } else {
-            $answer = Read-Host '下载会用远端快照整份替换本机学习数据（服务端会先留 rescue 备份）。继续？输入 y'
+            $answer = Read-Host '下载会用远端快照整份替换本机学习数据（服务端会先留 rescue 备份）。继续？输入 y 后按回车'
             if ($answer -ne 'y') { throw '已取消。' }
         }
     }
