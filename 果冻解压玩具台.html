@@ -9,7 +9,7 @@
 <div class="utilities"><button class="round" id="audio" aria-label="静音" title="静音"><svg class="icon"><use href="#sound"/></svg></button><div class="wrap"><button class="round" data-menu="clean" aria-expanded="false" aria-label="整理托盘" title="整理托盘"><svg class="icon"><use href="#reset"/></svg></button><div class="menu" id="clean" hidden><button id="restore">恢复初始托盘</button><button id="empty">清空托盘</button></div></div></div>
 <nav class="dock" aria-label="玩具台控制"><div class="wrap"><button class="setting" data-menu="flavors" aria-expanded="false" title="换口味"><i class="swatch" id="chip" style="--a:#f995a0;--b:#ffca85"></i><span id="flavorName">蜜桃汽水</span><b class="chev">⌃</b></button><div class="menu" id="flavors" hidden></div></div><div class="wrap"><button class="setting" data-menu="modes" aria-expanded="false" title="换软硬度"><svg class="icon"><use href="#spring"/></svg><span id="modeName">超软布丁</span><b class="chev">⌃</b></button><div class="menu" id="modes" hidden></div></div><i class="sep"></i><button id="rainBtn" class="rain" aria-pressed="false"><svg class="icon"><use href="#rain"/></svg><span>果冻雨</span></button><button id="shakeBtn" class="shake"><svg class="icon"><use href="#shake"/></svg>晃动托盘</button></nav>
 <div class="notice" id="notice" role="status"></div><div id="err" hidden>这个浏览器未能打开 3D 画布。请用启用图形加速的 Chrome、Edge 或 Firefox 打开。</div>
-<script>console.warn('Scripts "build/three.js" and "build/three.min.js" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation'),
+<script>
 /**
  * @license
  * Copyright 2010-2023 Three.js Authors
