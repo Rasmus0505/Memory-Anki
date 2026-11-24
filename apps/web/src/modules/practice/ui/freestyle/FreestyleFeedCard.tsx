@@ -44,7 +44,6 @@ export function FreestyleFeedCard({
   onUnitsReconciled,
   onCardHandled,
   onOpenScopeQuiz,
-  onBedtimeRate,
   onNavigateToIndex,
 }: {
   card: FreestyleCard
@@ -83,7 +82,6 @@ export function FreestyleFeedCard({
   onUnitsReconciled: UnitProps['onUnitsReconciled']
   onCardHandled: UnitProps['onCardHandled']
   onOpenScopeQuiz: UnitProps['onOpenScopeQuiz']
-  onBedtimeRate: UnitProps['onBedtimeRate']
   onNavigateToIndex: (index: number) => void
 }) {
   const active = isActive && index === currentIndex && index === visualIndex && !settlementVisible
@@ -139,8 +137,7 @@ export function FreestyleFeedCard({
                   onCardHandled={onCardHandled}
                   completed={completed}
                   onOpenScopeQuiz={onOpenScopeQuiz}
-                  onBedtimeRate={onBedtimeRate}
-                />
+                    />
               ) : (
                 <StaleUnitReviewCard
                   cardId={card.id}

@@ -175,7 +175,6 @@ def project_round_progress(
                 "kind": kind,
                 "entered_on": entered_on,
                 "is_new": bool((source or parent or {}).get("is_new")),
-                "bedtime": bool((source or parent or {}).get("bedtime")),
                 "is_quiz": kind == "quiz_question",
                 "status": status,
                 "tone": tone,

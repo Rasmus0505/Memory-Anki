@@ -31,7 +31,6 @@ export function applyServerRoundProgress(
       removed: item.status === 'excluded' || segment.removed,
       isNew: item.is_new,
       isQuiz: item.is_quiz,
-      bedtime: item.bedtime,
     }
   })
   return {

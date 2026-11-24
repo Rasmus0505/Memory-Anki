@@ -35,7 +35,7 @@ modules/practice/ui/review -> modules/quiz/public.ts
 
 ## 作答耗时反馈
 
-`showAnswerDurationBubble`（`modules/quiz/domain/quiz-entity/ui/answerDurationBubble.ts`）会在被点击的选项或提交按钮旁边向 `document.body` 追加一个自动消失的耗时胶囊。它故意位于题目组件之外：前进到下一题时它不得被卸载。它会在约 1.5 秒后自行淡出，并尊重 `prefers-reduced-motion`。随心复习评分条（普通条和睡前条）复用同一辅助函数，因此一次评分点击会显示该复习单元上花费的时间，而不必绑定到卡片的生命周期。
+`showAnswerDurationBubble`（`modules/quiz/domain/quiz-entity/ui/answerDurationBubble.ts`）会在被点击的选项或提交按钮旁边向 `document.body` 追加一个自动消失的耗时胶囊。它故意位于题目组件之外：前进到下一题时它不得被卸载。它会在约 1.5 秒后自行淡出，并尊重 `prefers-reduced-motion`。随心复习评分条复用同一辅助函数，因此一次评分点击会显示该复习单元上花费的时间，而不必绑定到卡片的生命周期。
 
 作答结果音效和触感属于给出答案的那次点击，而不是尝试写入。当宿主传入 `resultFeedbackMode: 'immediate'` 时，`useQuizAttemptOrchestration` 会在提交尝试之前播放它们。随心信息流不再内嵌做题卡，做题只发生在窗口里，因此答案反馈也只由窗口的提交点击触发。只有尝试记录、权威题目刷新和自动标记 toast 可以等待服务器。
 

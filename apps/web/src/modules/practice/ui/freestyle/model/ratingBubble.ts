@@ -9,8 +9,6 @@ export interface RatingBubbleInput {
   currentIntervalDays?: number | null
   palaceMode?: boolean
   palaceDueCount?: number
-  /** 睡前复习: the grade is recorded only, never rescheduled. */
-  bedtime?: boolean
   /** Yellow hint card: the button advances, it does not book a date. */
   hintMode?: boolean
 }
@@ -127,16 +125,11 @@ function passedParts(
  */
 export function ratingBubbleCopy(input: RatingBubbleInput): RatingBubbleCopy {
   const { rating, durationMs, effect, currentIntervalDays } = input
-  const tone = input.bedtime ? 'neutral' : TONE[rating]
-  const icon = input.bedtime ? '🌙' : ICON[rating]
+  const tone = TONE[rating]
+  const icon = ICON[rating]
   const parts: MicroBubblePart[] = []
   const time = timePart(durationMs)
   if (time) parts.push(time)
-
-  if (input.bedtime) {
-    parts.push({ text: ' · 只记录，不改期', muted: true })
-    return { tone, icon, parts }
-  }
 
   if (input.hintMode) {
     parts.push({ text: ' · 继续', muted: true })

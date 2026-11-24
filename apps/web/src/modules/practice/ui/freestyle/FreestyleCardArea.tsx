@@ -54,7 +54,6 @@ export function FreestyleCardArea({
   onEditingChange,
   onReconcileUnits,
   onOpenScopeQuiz,
-  onBedtimeRate,
   onNavigateToIndex,
   roundCompletion,
   dueTomorrowCount,
@@ -102,7 +101,6 @@ export function FreestyleCardArea({
   onEditingChange: FeedProps['onEditingChange']
   onReconcileUnits: (cardId: string) => void
   onOpenScopeQuiz: FeedProps['onOpenScopeQuiz']
-  onBedtimeRate: FeedProps['onBedtimeRate']
   onNavigateToIndex: FeedProps['onNavigateToIndex']
   roundCompletion: ClosingProps['completion']
   dueTomorrowCount: number | null
@@ -178,7 +176,6 @@ export function FreestyleCardArea({
               onUnitsReconciled={() => onReconcileUnits(card.id)}
               onCardHandled={onCardHandled}
               onOpenScopeQuiz={onOpenScopeQuiz}
-              onBedtimeRate={onBedtimeRate}
               onNavigateToIndex={onNavigateToIndex}
             />
           )

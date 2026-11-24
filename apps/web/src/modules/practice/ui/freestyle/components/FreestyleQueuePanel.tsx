@@ -113,14 +113,11 @@ function buildRows(input: {
             : 'pending'
     const save = input.ratingSaveEntries[id]
     const busy = save?.status === 'saving'
-    const specialReview = card != null && isMindMapBranchCard(card) && (card.bedtime || card.palace_pass)
-    const movable = status === 'pending' && !retry && !busy && !specialReview && entry?.lastRating == null
+    const movable = status === 'pending' && !retry && !busy && entry?.lastRating == null
     const excludable = status === 'pending' && card != null && !busy
     const rateable = excludable
       && card != null
       && isMindMapBranchCard(card)
-      && !card.bedtime
-      && !card.palace_pass
       && Boolean(card.unit_id)
       && card.unit_revision != null
     const selectable = status === 'removed' || excludable

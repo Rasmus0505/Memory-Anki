@@ -24,7 +24,6 @@ from .application.unit_review_queue_read import (
     list_trusted_due_units_for_queue,
     list_unit_node_members,
     list_unit_scheduling_nodes,
-    list_units_rated_on,
     summarize_waiting_units,
 )
 from .application.unit_review_service import (
@@ -121,7 +120,6 @@ __all__ = [
     "count_active_units_by_palace",
     "count_units_due_on",
     "list_trusted_due_units_for_queue",
-    "list_units_rated_on",
     "summarize_waiting_units",
     "list_unit_node_members",
     "list_unit_scheduling_nodes",

@@ -33,13 +33,8 @@ type ReviewMoreAction = {
   opensOverlay?: boolean
 }
 
-/**
- * Toolbar actions for the review map. A 睡前复习 card is reveal-only: its edit
- * entry, permanent-mark switch, and text-to-map import would write the palace
- * document during a pass that must not change anything.
- */
+/** Toolbar actions for the review map. */
 export function buildReviewToolbarExtensions({
-  reviewOnly,
   moreActions,
   isEditMode,
   permanentMarkMode,
@@ -48,7 +43,6 @@ export function buildReviewToolbarExtensions({
   onTogglePermanentMarkMode,
   onOpenScopeQuiz,
 }: {
-  reviewOnly: boolean
   moreActions: ReviewMoreAction[]
   isEditMode: boolean
   permanentMarkMode: boolean
@@ -58,14 +52,7 @@ export function buildReviewToolbarExtensions({
   onOpenScopeQuiz?: () => void
 }) {
   return {
-    moreActions: reviewOnly
-      ? moreActions.filter(
-          (action) =>
-            action.label !== '进入编辑'
-            && action.label !== '返回学习'
-            && action.label !== '文字转脑图',
-        )
-      : moreActions,
+    moreActions,
     permanentMarkAction: isEditMode
       ? buildPermanentMarkToolbarAction({
           active: permanentMarkMode,

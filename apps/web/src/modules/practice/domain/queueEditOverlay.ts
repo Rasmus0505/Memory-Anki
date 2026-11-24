@@ -99,14 +99,10 @@ function lockedServerIds(plan: FreestyleRoundPlanPayload): Set<string> {
     ...plan.completed_ids,
     ...plan.excluded_ids,
     ...(plan.compressed_ids ?? []),
-    ...Object.keys(plan.bedtime_ratings ?? {}),
   ])
   Object.entries(plan.encounters ?? {}).forEach(([id, encounter]) => {
     const rating = Number(encounter?.rating)
     if (rating === 1 || rating === 2 || rating === 3 || rating === 4) locked.add(id)
-  })
-  plan.original_cards.forEach((card) => {
-    if (card.bedtime || card.palace_pass) locked.add(card.card_id)
   })
   ;(plan.occurrences ?? []).forEach((occurrence) => {
     if (occurrence.occurrence_id) locked.add(occurrence.occurrence_id)

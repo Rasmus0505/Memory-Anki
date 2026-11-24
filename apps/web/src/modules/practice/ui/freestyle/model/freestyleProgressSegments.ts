@@ -47,8 +47,6 @@ export interface FreestyleProgressSegment {
   isNew?: boolean
   /** Quiz question tick (题目, green). Overrides the new/review hue. */
   isQuiz?: boolean
-  /** 睡前复习 tick: marked with a moon; its grade never reschedules. */
-  bedtime?: boolean
   /** A question bound to this unit is currently wrong. */
   wrong?: boolean
   /** All bound questions in the current quiz scope are correct. */
@@ -655,7 +653,6 @@ export function buildFreestyleProgressSummary(
         palaceDone: false,
         viewing: currentCardId === id,
         removed: true,
-        bedtime: card?.type === 'mindmap_branch' && card.bedtime === true,
         kind: retryKind ? 'retry' : 'source',
         enteredOn: planEntry.enteredOn,
         sourceLabel: card
@@ -735,7 +732,6 @@ export function buildFreestyleProgressSummary(
         palaceId: cardPalaceId(card),
         palaceDone: false,
         viewing: currentCardId === card.id,
-        bedtime: card.type === 'mindmap_branch' && card.bedtime === true,
         kind: retryKind ? 'retry' : 'source',
         enteredOn: planEntry?.enteredOn,
         sourceLabel: progressCardLabel(card, cards, roundPlan),

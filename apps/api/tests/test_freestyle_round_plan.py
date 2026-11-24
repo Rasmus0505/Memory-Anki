@@ -9,10 +9,7 @@ from memory_anki.modules.practice.domain.round_compress import (
     compressible_ids,
 )
 from memory_anki.modules.practice.domain.round_plan import (
-    append_bedtime_cards,
-    apply_bedtime_rating,
     apply_rating,
-    bedtime_card_ids,
     complete_card,
     exclude_card,
     leave_card,
@@ -31,7 +28,6 @@ from memory_anki.modules.practice.domain.round_plan_intraday import (
 )
 from memory_anki.modules.practice.domain.round_rebind import (
     append_today_cards,
-    drop_previous_day_bedtime,
     drop_undue_unstarted,
     drop_vanished_unstarted,
     rebind_plan_cards,
@@ -1530,61 +1526,6 @@ def test_retry_is_never_inserted_behind_the_cursor():
     retry_id = _inserted(plan, "c2")["occurrence_id"]
     presented = plan["presented_ids"]
     assert presented.index(retry_id) > presented.index("c9")
-
-
-def test_bedtime_append_moves_a_finished_card_to_the_end():
-    cards = [_card("a", unit_id="ua"), _card("b", unit_id="ub"), _card("c", unit_id="uc")]
-    plan = plan_from_cards(cards, today="2026-10-25")
-    plan = complete_card(plan, "a")
-    plan = exclude_card(plan, "b")
-
-    appended, added = append_bedtime_cards(
-        plan,
-        [{"card_id": "a", "unit_id": "ua", "kind": "mindmap_branch", "palace_id": 1, "bedtime": True}],
-        today="2026-10-25",
-    )
-
-    assert added == ["a"]
-    assert appended["presented_ids"][-1] == "a"
-    assert "a" not in appended["completed_ids"]
-    assert bedtime_card_ids(appended) == {"a"}
-    original = next(item for item in appended["original_cards"] if item["card_id"] == "a")
-    assert original["bedtime"] is True
-    # Excluded ids are untouched: they belong to other cards.
-    assert appended["excluded_ids"] == ["b"]
-
-
-def test_bedtime_rating_completes_without_a_reviews_encounter():
-    plan = plan_from_cards([_card("a", unit_id="ua")], today="2026-10-25")
-    plan, _ = append_bedtime_cards(
-        plan,
-        [{"card_id": "a", "unit_id": "ua", "kind": "mindmap_branch", "palace_id": 1, "bedtime": True}],
-        today="2026-10-25",
-    )
-
-    rated = apply_bedtime_rating(plan, card_id="a", rating=4, today="2026-10-25")
-
-    assert rated["bedtime_ratings"]["a"] == {"rating": 4, "rated_on": "2026-10-25"}
-    assert rated["completed_ids"] == ["a"]
-    assert rated["encounters"] == {}
-    assert rated["occurrences"] == []
-
-
-def test_previous_day_bedtime_does_not_survive_the_study_day():
-    plan = plan_from_cards([_card("a", unit_id="ua"), _card("b", unit_id="ub")], today="2026-10-24")
-    plan, _ = append_bedtime_cards(
-        plan,
-        [{"card_id": "b", "unit_id": "ub", "kind": "mindmap_branch", "palace_id": 1, "bedtime": True}],
-        today="2026-10-24",
-    )
-    plan = apply_bedtime_rating(plan, card_id="b", rating=3, today="2026-10-24")
-
-    next_day = drop_previous_day_bedtime(plan)
-
-    assert [item["card_id"] for item in next_day["original_cards"]] == ["a"]
-    assert "b" not in next_day["presented_ids"]
-    assert "b" not in next_day["completed_ids"]
-    assert next_day["bedtime_ratings"] == {}
 
 
 def test_rating_a_step_that_was_only_published_at_read_time_completes_it():

@@ -153,8 +153,6 @@ function cardFromOriginalSnapshot(
     node_count: 0,
     unit_id: unitId,
     unit_revision: revision,
-    ...(item.bedtime ? { bedtime: true } : {}),
-    ...(item.palace_pass ? { palace_pass: true } : {}),
   }
 }
 
@@ -175,19 +173,6 @@ export function cardsForServerPlan(
   )
   const originalById = new Map(
     (plan.original_cards || []).map((item) => [item.card_id, item] as const),
-  )
-  /** Cards appended by 睡前复习: the rail marks them and their grade never reschedules. */
-  const bedtimeIds = new Set(
-    (plan.original_cards || [])
-      .filter((item) => item.bedtime)
-      .map((item) => String(item.card_id || '').trim())
-      .filter(Boolean),
-  )
-  const palacePassIds = new Set(
-    (plan.original_cards || [])
-      .filter((item) => item.palace_pass)
-      .map((item) => String(item.card_id || '').trim())
-      .filter(Boolean),
   )
   const ordered: FreestyleCard[] = []
   const seen = new Set<string>()
@@ -230,13 +215,6 @@ export function cardsForServerPlan(
       retrySources.add(source)
     }
     seen.add(card.id)
-    if (card.type === 'mindmap_branch') {
-      const source = sourceCardId(card) || ''
-      const bedtime = bedtimeIds.has(card.id) || bedtimeIds.has(source)
-      const palacePass = palacePassIds.has(card.id) || palacePassIds.has(source)
-      ordered.push({ ...card, bedtime, palace_pass: palacePass })
-      return
-    }
     ordered.push(card)
   }
 

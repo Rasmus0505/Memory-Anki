@@ -1992,7 +1992,6 @@ def check_palace_quiz_palace_boundary(errors: list[str]) -> None:
 
 ROUND_COMMAND_DOMAIN_FILES = (
     "round_plan.py",
-    "round_plan_bedtime.py",
     "round_plan_fail.py",
     "round_plan_intraday.py",
     "round_plan_normalization.py",

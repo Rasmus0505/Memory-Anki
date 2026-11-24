@@ -4,7 +4,7 @@ Why a command facade
 --------------------
 The plan is one mutable dict with about fifteen keys, and every feature that
 touched a round — retry, wrong-first ordering, settlement compression, the new
-study day, bedtime, favourites — added a rule that assigns into it directly. The
+study day, favourites — added a rule that assigns into it directly. The
 rules then depend on call order rather than on a declared transition, which is
 how "the card under my finger changed" kept coming back through a different
 door each time.

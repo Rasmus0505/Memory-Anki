@@ -99,7 +99,6 @@ def empty_plan() -> Plan:
         "partial_settlements": [],
         "occurrences": [],
         "encounters": {},
-        "bedtime_ratings": {},
         "wrong_unit_ids": [],
         "wrong_question_ids": [],
         "today": "",
@@ -132,11 +131,6 @@ def snapshot_cards(cards: Sequence[Mapping[str, Any]] | None, *, today: str = ""
                 "label": label or card_id,
                 "entered_on": _day(card.get("entered_on")) or stamp,
                 "is_new": bool(card.get("is_new")),
-                # A bedtime card is a second pass over content already rated
-                # today. Its rating is recorded on the plan only and never
-                # reaches the scheduling ledger.
-                "bedtime": bool(card.get("bedtime")),
-                "palace_pass": bool(card.get("palace_pass")),
             }
         )
     return result
@@ -174,8 +168,6 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
                 "label": _text(item.get("label")) or card_id,
                 "entered_on": _day(item.get("entered_on")),
                 "is_new": bool(item.get("is_new")),
-                "bedtime": bool(item.get("bedtime")),
-                "palace_pass": bool(item.get("palace_pass")),
             }
         )
     occurrences = []
@@ -225,19 +217,6 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
             if rating in {1, 2, 3, 4}:
                 encounter["rating"] = rating
             encounters[card_id] = encounter
-    bedtime_ratings: dict[str, dict[str, Any]] = {}
-    raw_bedtime_ratings = raw.get("bedtime_ratings") or {}
-    if isinstance(raw_bedtime_ratings, Mapping):
-        for key, value in raw_bedtime_ratings.items():
-            card_id = _text(key)
-            raw_rating = value.get("rating") if isinstance(value, Mapping) else value
-            rating = _int(raw_rating)
-            if not card_id or rating not in {1, 2, 3, 4}:
-                continue
-            bedtime_ratings[card_id] = {
-                "rating": rating,
-                "rated_on": _day(value.get("rated_on")) if isinstance(value, Mapping) else "",
-            }
     normalized: Plan = {
         "original_cards": original,
         "presented_ids": _unique(raw.get("presented_ids") or [item["card_id"] for item in original]),
@@ -249,7 +228,6 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
         "partial_settlements": _partial_settlements(raw.get("partial_settlements")),
         "occurrences": occurrences,
         "encounters": encounters,
-        "bedtime_ratings": bedtime_ratings,
         "wrong_unit_ids": _unique(raw.get("wrong_unit_ids") or []),
         # wrong_question_ids 是当前答题范围的快照：题目改对后在下一次进度写入时
         # 被移除，因此红点跟着当前答案走。wrong_unit_ids 只服务错题优先排序，

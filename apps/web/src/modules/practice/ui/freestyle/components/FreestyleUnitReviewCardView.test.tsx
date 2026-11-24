@@ -369,7 +369,6 @@ function renderCard(
     onRatingSettled?: (cardId: string, passed: boolean, rating: number, meta?: unknown) => void
     onOpenScopeQuiz?: () => void
     onRemoveFromQueue?: (cardId: string) => void
-    onBedtimeRate?: (cardId: string, rating: UnitRating) => Promise<unknown>
   } = {},
 ) {
   const callbacks = {
@@ -388,7 +387,6 @@ function renderCard(
     onRatingScopeChange: vi.fn(),
     onRoundSync: vi.fn(),
     onOpenScopeQuiz: options.onOpenScopeQuiz,
-    onBedtimeRate: options.onBedtimeRate,
   }
   const props: CardProps = {
     card,
@@ -401,7 +399,6 @@ function renderCard(
     preferredZoom: options.preferredZoom,
     palaceTarget: options.palaceTarget,
     ...(options.onUserZoomChange ? { onUserZoomChange: options.onUserZoomChange } : {}),
-    ...(options.onBedtimeRate ? { onBedtimeRate: options.onBedtimeRate } : {}),
     onEnsureEncounter: callbacks.onEnsureEncounter,
     onEncounterChange: callbacks.onEncounterChange,
     onStaleDrop: callbacks.onStaleDrop,
@@ -2897,69 +2894,4 @@ describe('进入编辑 while the glance is still opening', () => {
     resolveSession(buildSession(card.unit_id!))
     await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('edit'))
   })
-})
-
-describe('睡前复习 card', () => {
-  beforeEach(() => {
-    capturedPanelProps = null
-    Object.values(apiMocks).forEach((mock) => mock.mockReset())
-    resetFreestyleSessionLaneForTests()
-    resetFreestyleRatingSavesForTests()
-    previewCacheMocks.useUnitPreview.mockReset()
-    previewCacheMocks.useSharedPalacePreview.mockReset()
-    previewCacheMocks.useSharedPalacePreview.mockReturnValue(null)
-    previewCacheMocks.rememberUnitPreview.mockReset()
-    apiMocks.cancelUnratedUnitReviewEncounterApi.mockResolvedValue({ abandoned: false })
-  })
-
-  it('renders a whole-palace pass from the read-only preview and records one grade', async () => {
-    const card: FreestyleReviewUnitCard = {
-      ...buildCard('unit-bedtime'),
-      bedtime: true,
-      palace_pass: true,
-      node_uids: ['unit-node', 'unit-child', 'other-unit', 'other-child'],
-      node_count: 4,
-    }
-    previewCacheMocks.useUnitPreview.mockReturnValue(buildSession('unit-bedtime'))
-    const onBedtimeRate = vi.fn().mockResolvedValue(undefined)
-
-    renderCard(card, { onBedtimeRate, lastRating: 3 })
-
-    expect(await screen.findByTestId('freestyle-bedtime-rating-bar')).toBeTruthy()
-    expect(screen.getByTestId('freestyle-bedtime-note').textContent).toContain('整座宫殿')
-    expect(screen.getByTestId('freestyle-bedtime-note').textContent).toContain('不改动复习安排')
-    expect(screen.getByTestId('freestyle-bedtime-rating-button-3').getAttribute('data-selected')).toBe('true')
-    // The whole palace is the reveal scope, not the representative unit slice.
-    expect(capturedPanelProps?.activeUnitNodeUids).toEqual([
-      'unit-node',
-      'unit-child',
-      'other-unit',
-      'other-child',
-    ])
-    // No Reviews glance: the card is already rated today.
-    expect(apiMocks.startFreestyleUnitReviewSessionApi).not.toHaveBeenCalled()
-    expect(apiMocks.getUnitReviewSessionApi).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByTestId('freestyle-bedtime-rating-button-2'))
-
-    await waitFor(() => expect(onBedtimeRate).toHaveBeenCalledWith(card.id, 2))
-    // It must never reach the normal rating path.
-    expect(apiMocks.rateFreestyleRoundUnitApi).not.toHaveBeenCalled()
-    expect(apiMocks.rateReviewUnitApi).not.toHaveBeenCalled()
-  })
-
-  it('keeps the map reveal-only: no edit action and no document write', async () => {
-    const card: FreestyleReviewUnitCard = { ...buildCard('unit-bedtime-edit'), bedtime: true }
-    previewCacheMocks.useUnitPreview.mockReturnValue(buildSession('unit-bedtime-edit'))
-
-    renderCard(card, { onBedtimeRate: vi.fn().mockResolvedValue(undefined) })
-
-    await screen.findByTestId('flip-card-mind-map-panel')
-    const actions = (capturedPanelProps?.toolbarExtensions as {
-      moreActions?: Array<{ label: string }>
-    }).moreActions ?? []
-    expect(actions.some((item) => item.label === '进入编辑')).toBe(false)
-    expect(capturedPanelProps?.onPaneDoubleClick).toBeUndefined()
-  })
-
 })

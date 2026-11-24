@@ -123,18 +123,6 @@ describe('ratingBubbleCopy', () => {
     expect(text(copy)).toBe('1.6s · 记下，不改期')
   })
 
-  it('marks bedtime as recorded-only, with a calm tone', () => {
-    const copy = ratingBubbleCopy({
-      rating: 4,
-      durationMs: 2100,
-      bedtime: true,
-    })
-
-    expect(copy.tone).toBe('neutral')
-    expect(copy.icon).toBe('🌙')
-    expect(text(copy)).toBe('2.1s · 只记录，不改期')
-  })
-
   it('still shows something while the plan is still loading', () => {
     const copy = ratingBubbleCopy({
       rating: 3,

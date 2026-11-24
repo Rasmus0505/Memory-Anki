@@ -15,7 +15,6 @@ export function FreestyleBottomActions({
   pendingRestudyCardIds,
   canCompleteRound,
   completeTitle,
-  topSlot,
   onPrevious,
   onNext,
   onComplete,
@@ -29,14 +28,12 @@ export function FreestyleBottomActions({
   pendingRestudyCardIds: string[]
   canCompleteRound: PagerProps['canComplete']
   completeTitle: PagerProps['completeTitle']
-  topSlot?: PagerProps['topSlot']
   onPrevious: PagerProps['onPrevious']
   onNext: PagerProps['onNext']
   onComplete: PagerProps['onComplete']
 }) {
   return (
     <FreestyleFeedPager
-      topSlot={topSlot}
       canGoPrevious={
         viewingCompleteSlot
           ? cards.length > 0

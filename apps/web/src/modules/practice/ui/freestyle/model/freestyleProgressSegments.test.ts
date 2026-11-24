@@ -130,15 +130,6 @@ describe('buildFreestyleProgressSummary', () => {
     expect(unsaved.passedCount).toBe(0)
   })
 
-  it('marks a 睡前复习 card with the moon flag and leaves normal cards unmarked', () => {
-    const normal = card('normal')
-    const bedtime = { ...card('bedtime'), bedtime: true } as FreestyleCard
-    const cards = [normal, bedtime]
-    const summary = buildFreestyleProgressSummary(cards, plan(cards), [], [], 'bedtime')
-
-    expect(summary.segments.map((segment) => segment.bedtime)).toEqual([false, true])
-  })
-
   it('tones each card from its plan status', () => {
     const cards = [card('one'), card('two'), card('three')]
     // `retry` comes from the plan entry's own status (written on a weak rating),

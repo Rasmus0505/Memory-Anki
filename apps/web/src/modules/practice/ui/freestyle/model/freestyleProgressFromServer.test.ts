@@ -13,7 +13,6 @@ function item(overrides: Partial<FreestyleRoundProgressItem> & { card_id: string
     kind: 'mindmap_branch',
     entered_on: '2026-11-01',
     is_new: false,
-    bedtime: false,
     is_quiz: false,
     status: 'pending',
     tone: 'pending',

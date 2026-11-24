@@ -74,25 +74,6 @@
     "expected_presented_ids": ["b", "open", "a"]
   },
   {
-    "name": "bedtime and whole-palace passes stay where they were appended",
-    "plan": {
-      "original_cards": [{"card_id": "a"}, {"card_id": "night", "bedtime": true}, {"card_id": "b"}, {"card_id": "pass", "palace_pass": true}],
-      "presented_ids": ["a", "night", "b", "pass"]
-    },
-    "order_ids": ["pass", "b", "night", "a"],
-    "expected_presented_ids": ["b", "night", "a", "pass"]
-  },
-  {
-    "name": "a plan-only bedtime grade locks its row",
-    "plan": {
-      "original_cards": [{"card_id": "a"}, {"card_id": "graded"}, {"card_id": "b"}],
-      "presented_ids": ["a", "graded", "b"],
-      "bedtime_ratings": {"graded": {"rating": 3, "rated_on": "2026-11-08"}}
-    },
-    "order_ids": ["b", "graded", "a"],
-    "expected_presented_ids": ["b", "graded", "a"]
-  },
-  {
     "name": "a source that still owes a booked retry keeps its slot",
     "plan": {
       "original_cards": [{"card_id": "a", "unit_id": "ua"}, {"card_id": "b"}, {"card_id": "c"}],

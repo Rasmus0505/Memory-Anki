@@ -23,7 +23,6 @@ export interface FreestyleRoundProgressItem {
   kind: string
   entered_on: string
   is_new: boolean
-  bedtime: boolean
   is_quiz: boolean
   status: FreestyleRoundProgressStatus
   tone: FreestyleRoundProgressTone

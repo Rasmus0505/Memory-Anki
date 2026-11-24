@@ -14,8 +14,8 @@ vi.mock('@/modules/practice/ui/freestyle/api', () => ({
   getActiveFreestyleRoundApi: api.read,
   getOrCreateFreestyleRoundApi: api.active,
   buildFreestyleQueueApi: api.build,
-  appendFreestyleBedtimeApi: vi.fn(), dropFreestyleOverlayQuizPalacesApi: vi.fn(),
-  rateFreestyleBedtimeCardApi: vi.fn(), startFreestyleRoundApi: vi.fn(),
+  dropFreestyleOverlayQuizPalacesApi: vi.fn(),
+  startFreestyleRoundApi: vi.fn(),
 }))
 vi.mock('@/shared/preferences/clientPreferences', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/shared/preferences/clientPreferences')>(),
@@ -38,7 +38,7 @@ function round(version = 1, order = ['a', 'b', 'c'], excluded: string[] = []): F
         kind: 'mindmap_branch', palace_id: 1, unit_revision: 1, label: card.id })),
       presented_ids: order, current_card_id: 'a', current_index: order.indexOf('a'),
       completed_ids: [], excluded_ids: excluded, compressed_ids: [],
-      encounters: {}, occurrences: [], bedtime_ratings: {},
+      encounters: {}, occurrences: [],
     },
   } as FreestyleRoundStatePayload
 }

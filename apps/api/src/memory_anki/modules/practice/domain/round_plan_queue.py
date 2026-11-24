@@ -39,15 +39,10 @@ def reorder_unscored_cards(plan: Mapping[str, Any], order_ids: Sequence[str]) ->
         set(next_plan["completed_ids"])
         | set(next_plan["excluded_ids"])
         | set(next_plan["compressed_ids"])
-        | set(next_plan["bedtime_ratings"])
     )
     locked.update(
         card_id for card_id, encounter in next_plan["encounters"].items()
         if _int(encounter.get("rating")) in {1, 2, 3, 4}
-    )
-    locked.update(
-        item["card_id"] for item in next_plan["original_cards"]
-        if item.get("bedtime") or item.get("palace_pass")
     )
     locked.update(
         _text(item.get("occurrence_id"))

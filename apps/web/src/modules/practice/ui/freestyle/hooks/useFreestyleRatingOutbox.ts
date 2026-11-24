@@ -139,8 +139,6 @@ export function useFreestyleRatingOutbox(input: {
         !roundId
         || !card
         || !isMindMapBranchCard(card)
-        || card.bedtime
-        || card.palace_pass
         || !card.unit_id
         || card.unit_revision == null
         || current.excludedIds.has(cardId)

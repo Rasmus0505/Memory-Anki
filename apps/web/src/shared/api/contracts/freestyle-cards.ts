@@ -39,9 +39,6 @@ export interface FreestyleReviewUnitCard extends FreestylePalaceCardBase {
   presentation?: 'palace'
   unit_id: string
   unit_revision: number
-  /** 睡前复习: whole-palace pass; its plan-only grade never reschedules. */
-  bedtime?: boolean
-  palace_pass?: boolean
 }
 
 export type FreestyleMindMapBranchCard = FreestyleReviewUnitCard
@@ -174,9 +171,6 @@ export interface FreestyleRoundOriginalCard {
   label: string
   entered_on?: string
   is_new?: boolean
-  /** 睡前复习: whole-palace pass; its plan-only grade never reschedules. */
-  bedtime?: boolean
-  palace_pass?: boolean
 }
 
 export type {
@@ -210,8 +204,6 @@ export interface FreestyleRoundPlanPayload {
     /** Concrete 1–4 score. Absent means completion without a displayed rating. */
     rating?: number | null
   }>
-  /** Plan-only 睡前复习 grades, keyed by card id. */
-  bedtime_ratings?: Record<string, { rating: number; rated_on?: string }>
   overlay_quiz?: FreestyleOverlayQuizState
 }
 // The 做题 scope report types live in `freestyleOverlayScope.ts`: one owner, one

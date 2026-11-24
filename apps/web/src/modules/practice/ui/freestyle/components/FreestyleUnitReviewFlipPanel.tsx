@@ -49,8 +49,6 @@ export function FreestyleUnitReviewFlipPanel({
   unit,
   editorState,
   active = true,
-  reviewOnly = false,
-  scopeNodeUids,
   fullscreen,
   onToggleFullscreen,
   freestyleFlipMode = 'free',
@@ -76,9 +74,6 @@ export function FreestyleUnitReviewFlipPanel({
   unit: ReviewUnitDto
   editorState: MindMapEditorState
   active?: boolean
-  /** 睡前复习: reveal-only map; no editing, permanent marks, or document writes. */
-  reviewOnly?: boolean
-  scopeNodeUids?: string[]
   fullscreen: boolean
   onToggleFullscreen: (active?: boolean) => void
   freestyleFlipMode?: FreestyleFlipMode
@@ -129,8 +124,8 @@ export function FreestyleUnitReviewFlipPanel({
   displayModeRef.current = displayMode
 
   const flipTargetUids = useMemo(
-    () => (scopeNodeUids?.length ? Array.from(new Set(scopeNodeUids)) : unitFlipTargetUids(unit.node_uids, unit.anchor_uid)),
-    [scopeNodeUids, unit.anchor_uid, unit.node_uids],
+    () => unitFlipTargetUids(unit.node_uids, unit.anchor_uid),
+    [unit.anchor_uid, unit.node_uids],
   )
   const allowedRevealNodeIds = useMemo(() => {
     if (freestyleFlipMode !== 'focused') return undefined
@@ -329,7 +324,6 @@ export function FreestyleUnitReviewFlipPanel({
   }, [])
 
   const handleToggleMode = useCallback(() => {
-    if (reviewOnly) return
     if (!active) {
       // Still a read-only preview: the live glance is opening. Keep the edit tap
       // and apply it when the glance arrives, instead of silently dropping it.
@@ -371,7 +365,6 @@ export function FreestyleUnitReviewFlipPanel({
     reconcileReturn()
   }, [
     active,
-    reviewOnly,
     flipTargetUids,
     isEditMode,
     onEditorStateSaved,
@@ -530,7 +523,7 @@ export function FreestyleUnitReviewFlipPanel({
             : undefined
         }
         toolbarExtensions={buildReviewToolbarExtensions({
-          reviewOnly, moreActions: textToMindMap.moreActions, isEditMode, permanentMarkMode,
+          moreActions: textToMindMap.moreActions, isEditMode, permanentMarkMode,
           markedCount: permanentMarkHighlights.length, savingEdit,
           onTogglePermanentMarkMode: handleTogglePermanentMarkMode, onOpenScopeQuiz,
         })}
@@ -542,8 +535,8 @@ export function FreestyleUnitReviewFlipPanel({
         preferredZoom={preferredZoom}
         onUserZoomChange={onUserZoomChange}
         toolbarCenterContent={
-          // Neighbour previews skip it (~1s fetch); a bedtime palace pass has no unit interval.
-          ladderEnabled && !reviewOnly ? (
+          // Neighbour previews skip it (~1s fetch).
+          ladderEnabled ? (
             <ReviewLevelBar
               wrongThisRound={wrongThisRound}
               unitId={unit.id}
@@ -564,7 +557,7 @@ export function FreestyleUnitReviewFlipPanel({
         onNodeHover={isEditMode ? undefined : reveal.handleNodeHover}
         revealFollowNodeIds={revealFollow.nodeIds}
         revealFollowNonce={revealFollow.nonce}
-        onPaneDoubleClick={reviewOnly ? undefined : handleToggleMode}
+        onPaneDoubleClick={handleToggleMode}
         preserveViewOnSync
         initialViewPolicy="preserve"
         sceneTransitionFallbackNodeId={unit.anchor_uid || null}

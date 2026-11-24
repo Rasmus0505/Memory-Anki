@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Moon, Star } from 'lucide-react'
+import { Star } from 'lucide-react'
 import {
   progressSegmentAccentClass,
   progressSegmentShapeClass,
@@ -274,27 +274,17 @@ export function ProgressRailItem({
             dimClass,
           )}
         >
-          {segment.bedtime || (palaceFavorite && palaceStaggerIndex === 0) ? (
+          {palaceFavorite && palaceStaggerIndex === 0 ? (
             <span
               aria-hidden
               data-testid="freestyle-progress-marker"
               className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-center gap-0.5"
             >
-              {palaceFavorite && palaceStaggerIndex === 0 ? (
-                <Star
-                  data-testid="freestyle-progress-favorite"
-                  className={cn(
-                    'shrink-0 fill-current text-warning/85',
-                    segment.bedtime ? 'size-1.5' : 'size-2',
-                  )}
-                  strokeWidth={2.2}
-                />
-              ) : null}
-              {segment.bedtime ? (
-                <span data-testid="freestyle-progress-bedtime" className="shrink-0 text-stage-muted">
-                  <Moon className="size-2.5" strokeWidth={2.4} />
-                </span>
-              ) : null}
+              <Star
+                data-testid="freestyle-progress-favorite"
+                className="size-2 shrink-0 fill-current text-warning/85"
+                strokeWidth={2.2}
+              />
             </span>
           ) : null}
           <span

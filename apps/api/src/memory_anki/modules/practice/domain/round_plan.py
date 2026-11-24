@@ -6,11 +6,6 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
-from .round_plan_bedtime import (  # noqa: F401 - compatibility re-exports
-    append_bedtime_cards,
-    apply_bedtime_rating,
-    bedtime_card_ids,
-)
 from .round_plan_normalization import (  # noqa: F401 - compatibility re-exports
     _collapse_retries,
     _sync_index,

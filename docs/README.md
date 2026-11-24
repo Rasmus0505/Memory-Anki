@@ -7,7 +7,8 @@
 
 | 你是谁 / 想做什么 | 从这里开始 |
 |---|---|
-| 第一次了解产品 | [Memory-Anki-用户视角介绍.md](Memory-Anki-用户视角介绍.md) |
+| 第一次了解产品 | [../doc/PRD.md](../doc/PRD.md)（产品需求文档，分层）→ [Memory-Anki-用户视角介绍.md](Memory-Anki-用户视角介绍.md) |
+| 想看每个页面有什么、怎么用 | [../doc/交互/00-总览.md](../doc/交互/00-总览.md)（逐页交互说明） |
 | 想看界面怎么排、手机怎么变 | [Memory-Anki-前端布局-用户视角.md](Memory-Anki-前端布局-用户视角.md) |
 | 想改颜色、字体、间距、组件样式 | [../DESIGN.md](../DESIGN.md)（视觉系统）→ [../PRODUCT.md](../PRODUCT.md)（产品事实） |
 | 想知道哪些列表能右键、各能做什么 | [列表右键菜单.md](列表右键菜单.md) |
@@ -32,6 +33,8 @@
 | [Memory-Anki-前端布局-用户视角.md](Memory-Anki-前端布局-用户视角.md) | 前端布局说明（用户语言） | 现行 | 2026-11-05 |
 | [../DESIGN.md](../DESIGN.md) | 视觉系统：纸与灯、颜色/字体/间距/组件规则 | 现行 | 2026-11-08 |
 | [../PRODUCT.md](../PRODUCT.md) | 产品事实：使用者、场景、约束、模式分配 | 现行 | 2026-11-08 |
+| [../doc/PRD.md](../doc/PRD.md) | 产品需求文档：定位、需求层级、功能需求、规则（面向客户，单文件） | 现行 | 2026-11-24 |
+| [../doc/交互/](../doc/交互/00-总览.md) | 逐页交互说明：1 份总览 + 16 份页面文档 | 现行 | 2026-11-24 |
 | [design/impeccable-runbook.md](design/impeccable-runbook.md) | impeccable 24 命令（全站）运行记录 | 现行 | 2026-11-08 |
 | [design/impeccable-runbook-freestyle-mindmap.md](design/impeccable-runbook-freestyle-mindmap.md) | impeccable 24 命令（随心 + 脑图）运行记录 | 现行 | 2026-11-08 |
 | [design/audits/](design/audits/2026-11-08-shelf-insights.md) | 技术审查（书架 / 洞察） | 快照 | 2026-11-08 |

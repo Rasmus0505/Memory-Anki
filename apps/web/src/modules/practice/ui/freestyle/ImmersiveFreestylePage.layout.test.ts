@@ -21,7 +21,6 @@ const source = [
   'FreestyleBottomActions.tsx',
   'components/FreestyleFeedPager.tsx',
   'components/FreestylePalaceDirectoryPanel.tsx',
-  'components/FreestyleBedtimeButton.tsx',
   'hooks/useFreestyleFeedNavigation.ts',
   'components/FreestyleHudChrome.tsx',
 ].map(read).join('\n')
@@ -204,16 +203,5 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(source).toContain('useFreestylePalaceDirectoryActions')
     expect(source).toContain('<FreestylePalaceJoinDialog')
     expect(source).toContain('onSelectPalace={openPalaceFromDirectory}')
-  })
-
-  it('places 睡前复习 above the right-side pager and confirms before appending', () => {
-    expect(source).toContain('FreestyleBedtimeButton')
-    expect(source).toContain('topSlot={')
-    expect(source).toContain('title="睡前复习"')
-    expect(source).toContain('getFreestyleBedtimeCandidatesApi')
-    expect(source).toContain('appendBedtimeReview')
-    expect(source).toContain('不会改动原来的复习安排')
-    // The closing page hides the pager; the moon must still be reachable there.
-    expect(source).toContain('viewingCompleteSlot && queueState.roundId')
   })
 })
